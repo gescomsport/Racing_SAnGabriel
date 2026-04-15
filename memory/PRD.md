@@ -12,21 +12,26 @@ Web para el club deportivo Racing San Gabriel ADC (racingsangabriel.es). Ejemplo
 ## Lo Implementado (15 Abril 2026)
 - Hero Section con bento grid y escudo del club
 - Sección de Noticias con tarjetas de Instagram/Facebook
-- Sección de Equipos con plantilla
+- 14 categorias reales de equipos (Alevin A/B, Benjamin A/B, Cadete, Escuela Iniciacion, Futbol Femenino, Futbol Sala Senior, Infantil A/B, Juvenil A/B, Prebenjamin, Senior)
 - Calendario de Partidos con tabla
 - Galería de Fotos con lightbox
-- Formulario de Contacto
-- Footer con info del club y enlaces
-- Panel Admin completo (CRUD: Noticias, Equipos, Partidos, Galería, Mensajes, Ajustes)
+- Formulario de Contacto con datos reales
+- Footer con info del club real y enlaces sociales
+- Panel Admin completo (CRUD: Noticias, Equipos, Partidos, Galería, Mensajes, Ajustes, Redes Sociales)
 - Autenticación JWT para admin
-- Seed de datos demo al arrancar
-- **Integración Redes Sociales (NUEVA)**:
-  - Facebook: Page Plugin oficial (gratis, iframe automático, solo pegar URL)
-  - Instagram: Soporte Elfsight/Curator.io (copiar-pegar embed code)
-  - Feed Completo: Soporte multi-red via Curator/POWR/Juicer
-  - Panel admin "Redes Sociales" con guías paso a paso
-  - Sección pública con feeds en vivo
-- Diseño responsive con colores azul/blanco
+- **Datos reales del club**:
+  - Dirección: Carrer Racing San Gabriel, 39, 03008 Alacant, Alicante
+  - Teléfono: +34 617 50 27 80
+  - Email: racingsangabrieladc@hotmail.com
+  - Horario: Lunes a Sábado 9:00-21:00
+  - Valoración Google: 4.2/5 (46 reseñas)
+- **Integración Redes Sociales**:
+  - Facebook: Page Plugin oficial (iframe automático)
+  - Instagram: Soporte Elfsight/Curator.io (copiar-pegar embed)
+  - Feed Completo: Multi-red via Curator/POWR/Juicer
+  - Guía super simplificada en 3 pasos
+- 4 Espacios/Instalaciones: La Cigüeña Campo Fútbol, Sala Multiactividad, Sede Club Socios, Campo Fútbol Sala
+- Diseño responsive azul/blanco
 
 ## Backlog
 ### P0
