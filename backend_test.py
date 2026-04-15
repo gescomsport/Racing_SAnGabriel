@@ -121,6 +121,103 @@ class RacingSanGabrielAPITester:
         }
         success, _ = self.run_test("POST Contact", "POST", "contact", 200, contact_data)
 
+    def test_social_posts_endpoints(self):
+        """Test social posts endpoints"""
+        print("\n🔍 Testing Social Posts Endpoints...")
+        
+        # Test GET all social posts
+        success, posts = self.run_test("GET Social Posts", "GET", "social-posts", 200)
+        if success:
+            self.log_result(f"Social posts count: {len(posts)}", len(posts) >= 0, f"Got {len(posts)} posts")
+            
+            # Check if posts have required fields
+            if posts:
+                post = posts[0]
+                required_fields = ['id', 'source', 'content', 'posted_at', 'received_at']
+                for field in required_fields:
+                    if field in post:
+                        self.log_result(f"Social post has {field}", True)
+                    else:
+                        self.log_result(f"Social post missing {field}", False, f"Field {field} not found")
+
+        # Test GET Instagram posts with limit
+        success, ig_posts = self.run_test("GET Instagram Posts", "GET", "social-posts?source=instagram&limit=4", 200)
+        if success:
+            self.log_result(f"Instagram posts limit works", len(ig_posts) <= 4, f"Expected ≤4, got {len(ig_posts)}")
+            # Check all posts are Instagram
+            if ig_posts:
+                all_instagram = all(post.get('source') == 'instagram' for post in ig_posts)
+                self.log_result("All posts are Instagram", all_instagram, "Some posts are not Instagram")
+
+        # Test GET Facebook posts with limit
+        success, fb_posts = self.run_test("GET Facebook Posts", "GET", "social-posts?source=facebook&limit=4", 200)
+        if success:
+            self.log_result(f"Facebook posts limit works", len(fb_posts) <= 4, f"Expected ≤4, got {len(fb_posts)}")
+            # Check all posts are Facebook
+            if fb_posts:
+                all_facebook = all(post.get('source') == 'facebook' for post in fb_posts)
+                self.log_result("All posts are Facebook", all_facebook, "Some posts are not Facebook")
+
+    def test_webhook_endpoint(self):
+        """Test webhook endpoint for social posts"""
+        print("\n🔍 Testing Webhook Endpoint...")
+        
+        # Test webhook with correct API key
+        webhook_data = {
+            "source": "instagram",
+            "content": "Test post from automated testing",
+            "image_url": "https://example.com/test.jpg",
+            "post_url": "https://www.instagram.com/p/test123/",
+            "author": "@racingsangabrieladc",
+            "timestamp": datetime.now().isoformat(),
+            "api_key": "rsg-webhook-2025-secret"
+        }
+        success, response = self.run_test("Webhook with correct API key", "POST", "webhook/social-post", 200, webhook_data)
+        if success:
+            self.log_result("Webhook returns post ID", 'id' in response, "No ID in response")
+            webhook_post_id = response.get('id')
+        
+        # Test webhook with wrong API key
+        wrong_webhook_data = webhook_data.copy()
+        wrong_webhook_data["api_key"] = "wrong-key"
+        success, _ = self.run_test("Webhook with wrong API key", "POST", "webhook/social-post", 403, wrong_webhook_data)
+        
+        # Test webhook without API key
+        no_key_webhook_data = webhook_data.copy()
+        del no_key_webhook_data["api_key"]
+        success, _ = self.run_test("Webhook without API key", "POST", "webhook/social-post", 403, no_key_webhook_data)
+        
+        # Test webhook with Facebook source
+        fb_webhook_data = {
+            "source": "facebook",
+            "content": "Test Facebook post from automated testing",
+            "image_url": "https://example.com/fb-test.jpg",
+            "post_url": "https://www.facebook.com/RacingSanGabrielADC/posts/test123",
+            "author": "Racing San Gabriel ADC",
+            "timestamp": datetime.now().isoformat(),
+            "api_key": "rsg-webhook-2025-secret"
+        }
+        success, fb_response = self.run_test("Facebook webhook", "POST", "webhook/social-post", 200, fb_webhook_data)
+        if success:
+            fb_post_id = fb_response.get('id')
+        
+        # Verify posts were created by fetching them
+        success, all_posts = self.run_test("Verify webhook posts created", "GET", "social-posts", 200)
+        if success and webhook_post_id:
+            created_post = next((p for p in all_posts if p.get('id') == webhook_post_id), None)
+            if created_post:
+                self.log_result("Webhook post found in database", True)
+                # Verify post data
+                if created_post.get('content') == webhook_data['content']:
+                    self.log_result("Webhook post content correct", True)
+                else:
+                    self.log_result("Webhook post content incorrect", False, 
+                                  f"Expected '{webhook_data['content']}', got '{created_post.get('content')}'")
+            else:
+                self.log_result("Webhook post found in database", False, "Post not found")
+        
+        return True
+
     def test_authentication(self):
         """Test authentication endpoints"""
         print("\n🔍 Testing Authentication...")
@@ -289,6 +386,8 @@ class RacingSanGabrielAPITester:
         # Run test suites
         self.test_health_check()
         self.test_public_endpoints()
+        self.test_social_posts_endpoints()
+        self.test_webhook_endpoint()
         
         if self.test_authentication():
             self.test_protected_endpoints()

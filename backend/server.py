@@ -84,6 +84,16 @@ class NewsUpdate(BaseModel):
     source: Optional[str] = None
     category: Optional[str] = None
 
+# Webhook model - receives posts from n8n/Make
+class SocialPostWebhook(BaseModel):
+    source: str  # "instagram" or "facebook"
+    content: Optional[str] = ""
+    image_url: Optional[str] = ""
+    post_url: Optional[str] = ""
+    author: Optional[str] = ""
+    timestamp: Optional[str] = ""
+    api_key: Optional[str] = ""
+
 class TeamCreate(BaseModel):
     name: str
     category: str
@@ -196,6 +206,43 @@ async def delete_news(news_id: str, request: Request):
     await get_current_user(request)
     await db.news.delete_one({"id": news_id})
     return {"message": "Noticia eliminada"}
+
+
+# --- SOCIAL POSTS (from webhooks/automation) ---
+@api_router.get("/social-posts")
+async def get_social_posts(source: Optional[str] = None, limit: int = 8):
+    query = {"source": source} if source else {}
+    posts = await db.social_posts.find(query, {"_id": 0}).sort("posted_at", -1).to_list(limit)
+    return posts
+
+@api_router.post("/webhook/social-post")
+async def receive_social_post(data: SocialPostWebhook):
+    """Webhook endpoint - receives posts from n8n/Make/Zapier automation.
+    No auth required (uses optional api_key for security).
+    """
+    webhook_key = os.environ.get("WEBHOOK_API_KEY", "")
+    if webhook_key and data.api_key != webhook_key:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    
+    doc = {
+        "id": str(uuid.uuid4()),
+        "source": data.source.lower(),
+        "content": data.content or "",
+        "image_url": data.image_url or "",
+        "post_url": data.post_url or "",
+        "author": data.author or "",
+        "posted_at": data.timestamp or datetime.now(timezone.utc).isoformat(),
+        "received_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.social_posts.insert_one(doc)
+    return {"status": "ok", "id": doc["id"]}
+
+@api_router.delete("/social-posts/{post_id}")
+async def delete_social_post(post_id: str, request: Request):
+    await get_current_user(request)
+    await db.social_posts.delete_one({"id": post_id})
+    return {"message": "Post eliminado"}
+
 
 # --- TEAMS ENDPOINTS ---
 @api_router.get("/teams")
@@ -452,6 +499,22 @@ async def seed_demo_data():
             {"id": str(uuid.uuid4()), "title": "Estadio", "image_url": "https://static.prod-images.emergentagent.com/jobs/aa4aac70-2da7-49b9-b970-59a86d8b85ed/images/2e97b7f318b408c34d0d83e3483ffb1fb1d9ea389c42fb72c00f0fdd9219dad4.png", "description": "Vista del estadio", "category": "instalaciones", "created_at": datetime.now(timezone.utc).isoformat()},
         ]
         await db.gallery.insert_many(gallery)
+
+    # Seed sample social posts (to show how it looks before n8n is connected)
+    count = await db.social_posts.count_documents({})
+    if count == 0:
+        social_posts = [
+            {"id": str(uuid.uuid4()), "source": "instagram", "content": "Gran entrenamiento de nuestro equipo Juvenil A esta tarde. Preparandose para el proximo partido de liga. Vamos Racing!", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "post_url": "https://www.instagram.com/racingsangabrieladc/", "author": "@racingsangabrieladc", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "source": "instagram", "content": "Inscripciones abiertas para la temporada 2025/2026. Todas las categorias disponibles. Contactanos!", "image_url": "https://images.unsplash.com/photo-1652190416554-c46af8a0ff50?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHw0fHxzb2NjZXIlMjBmb290YmFsbCUyMGZpZWxkJTIwdHJhaW5pbmd8ZW58MHx8fHwxNzc2MjY4MjIwfDA&ixlib=rb-4.1.0&q=85", "post_url": "https://www.instagram.com/racingsangabrieladc/", "author": "@racingsangabrieladc", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "source": "instagram", "content": "Nuestro futbol femenino sigue creciendo. Ya contamos con 4 equipos!", "image_url": "", "post_url": "https://www.instagram.com/racingsangabrieladc/", "author": "@racingsangabrieladc", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "source": "instagram", "content": "Clase de Zumba esta tarde en la Sala Multiactividad. Te apuntas?", "image_url": "", "post_url": "https://www.instagram.com/racingsangabrieladc/", "author": "@racingsangabrieladc", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "source": "facebook", "content": "Victoria del Alevin A este fin de semana. Gran trabajo de todo el equipo y del cuerpo tecnico. Seguimos sumando!", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "post_url": "https://www.facebook.com/RacingSanGabrielADC/", "author": "Racing San Gabriel ADC", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "source": "facebook", "content": "Horario de entrenamientos actualizado para esta semana. Consulta en la sede o llamanos al 617 50 27 80.", "image_url": "", "post_url": "https://www.facebook.com/RacingSanGabrielADC/", "author": "Racing San Gabriel ADC", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "source": "facebook", "content": "Nuevas equipaciones disponibles para todos los equipos. Pasate por la sede!", "image_url": "https://images.unsplash.com/photo-1652190416150-d501a60291b3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwyfHxzb2NjZXIlMjBmb290YmFsbCUyMGZpZWxkJTIwdHJhaW5pbmd8ZW58MHx8fHwxNzc2MjY4MjIwfDA&ixlib=rb-4.1.0&q=85", "post_url": "https://www.facebook.com/RacingSanGabrielADC/", "author": "Racing San Gabriel ADC", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "source": "facebook", "content": "Torneo de verano para categorias base. Pronto mas informacion!", "image_url": "", "post_url": "https://www.facebook.com/RacingSanGabrielADC/", "author": "Racing San Gabriel ADC", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+        ]
+        await db.social_posts.insert_many(social_posts)
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

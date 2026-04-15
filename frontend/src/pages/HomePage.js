@@ -1,6 +1,6 @@
 import Header from "../components/Header";
 import HeroSection from "../components/HeroSection";
-import NewsSection from "../components/NewsSection";
+import SocialPostsSection from "../components/SocialPostsSection";
 import SocialFeedSection from "../components/SocialFeedSection";
 import TeamSection from "../components/TeamSection";
 import MatchCalendar from "../components/MatchCalendar";
@@ -13,7 +13,7 @@ export default function HomePage() {
     <div className="min-h-screen" data-testid="home-page">
       <Header />
       <HeroSection />
-      <NewsSection />
+      <SocialPostsSection />
       <SocialFeedSection />
       <TeamSection />
       <MatchCalendar />
