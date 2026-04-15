@@ -20,7 +20,12 @@ Web para el club deportivo Racing San Gabriel ADC (racingsangabriel.es). Ejemplo
 - Panel Admin completo (CRUD: Noticias, Equipos, Partidos, Galería, Mensajes, Ajustes)
 - Autenticación JWT para admin
 - Seed de datos demo al arrancar
-- Integración con redes sociales (enlaces directos a Instagram y Facebook)
+- **Integración Redes Sociales (NUEVA)**:
+  - Facebook: Page Plugin oficial (gratis, iframe automático, solo pegar URL)
+  - Instagram: Soporte Elfsight/Curator.io (copiar-pegar embed code)
+  - Feed Completo: Soporte multi-red via Curator/POWR/Juicer
+  - Panel admin "Redes Sociales" con guías paso a paso
+  - Sección pública con feeds en vivo
 - Diseño responsive con colores azul/blanco
 
 ## Backlog
