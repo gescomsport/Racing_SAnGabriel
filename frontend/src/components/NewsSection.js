@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { Newspaper, Instagram, Facebook, Globe, ExternalLink } from "lucide-react";
+import { Newspaper, Instagram, Facebook, Globe } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -66,43 +66,6 @@ export default function NewsSection() {
               </div>
             </article>
           ))}
-        </div>
-
-        {/* Social Media Embeds */}
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl border border-[#E2E8F0] p-6" data-testid="instagram-feed-card">
-            <div className="flex items-center gap-2 mb-4">
-              <Instagram size={20} className="text-[#E1306C]" />
-              <h3 className="font-heading font-bold text-[#00296B]">Instagram</h3>
-              <a href="https://www.instagram.com/racingsangabrieladc/" target="_blank" rel="noopener noreferrer"
-                 className="ml-auto text-[#2460FF] hover:text-[#00296B] flex items-center gap-1 text-sm" data-testid="instagram-follow-link">
-                @racingsangabrieladc <ExternalLink size={12} />
-              </a>
-            </div>
-            <p className="text-sm text-[#475569] mb-3">Sigue nuestras publicaciones en Instagram para estar al dia de todo lo que pasa en el club.</p>
-            <a href="https://www.instagram.com/racingsangabrieladc/" target="_blank" rel="noopener noreferrer"
-               className="inline-flex items-center gap-2 bg-gradient-to-r from-[#833AB4] via-[#E1306C] to-[#F77737] text-white text-sm font-medium px-4 py-2 rounded-full hover:opacity-90 transition-opacity"
-               data-testid="instagram-visit-button">
-              <Instagram size={16} /> Visitar Instagram
-            </a>
-          </div>
-
-          <div className="bg-white rounded-xl border border-[#E2E8F0] p-6" data-testid="facebook-feed-card">
-            <div className="flex items-center gap-2 mb-4">
-              <Facebook size={20} className="text-[#1877F2]" />
-              <h3 className="font-heading font-bold text-[#00296B]">Facebook</h3>
-              <a href="https://www.facebook.com/RacingSanGabrielADC/" target="_blank" rel="noopener noreferrer"
-                 className="ml-auto text-[#2460FF] hover:text-[#00296B] flex items-center gap-1 text-sm" data-testid="facebook-follow-link">
-                RacingSanGabrielADC <ExternalLink size={12} />
-              </a>
-            </div>
-            <p className="text-sm text-[#475569] mb-3">Encuentra toda la informacion del club en nuestra pagina de Facebook.</p>
-            <a href="https://www.facebook.com/RacingSanGabrielADC/" target="_blank" rel="noopener noreferrer"
-               className="inline-flex items-center gap-2 bg-[#1877F2] text-white text-sm font-medium px-4 py-2 rounded-full hover:bg-[#1565C0] transition-colors"
-               data-testid="facebook-visit-button">
-              <Facebook size={16} /> Visitar Facebook
-            </a>
-          </div>
         </div>
       </div>
     </section>

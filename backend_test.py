@@ -83,7 +83,8 @@ class RacingSanGabrielAPITester:
         # Test settings
         success, settings = self.run_test("GET Settings", "GET", "settings", 200)
         if success and settings:
-            expected_fields = ['club_name', 'description', 'instagram_url', 'facebook_url']
+            expected_fields = ['club_name', 'description', 'instagram_url', 'facebook_url', 
+                             'facebook_embed_enabled', 'facebook_page_url', 'instagram_embed_code', 'custom_embed_code']
             for field in expected_fields:
                 if field in settings:
                     self.log_result(f"Settings has {field}", True)
@@ -219,12 +220,26 @@ class RacingSanGabrielAPITester:
         if success:
             self.log_result(f"Contacts retrieved: {len(contacts)}", True)
         
-        # Test updating settings
+        # Test updating settings (including social media fields)
         settings_data = {
             "club_name": "Racing San Gabriel ADC - Updated",
-            "description": "Updated description for testing"
+            "description": "Updated description for testing",
+            "facebook_embed_enabled": True,
+            "facebook_page_url": "https://www.facebook.com/TestPage/",
+            "instagram_embed_code": "<div>Test Instagram Embed</div>",
+            "custom_embed_code": "<div>Test Custom Embed</div>"
         }
-        success, _ = self.run_test("Update Settings", "PUT", "settings", 200, settings_data)
+        success, updated_settings = self.run_test("Update Settings", "PUT", "settings", 200, settings_data)
+        
+        # Verify social media fields were saved
+        if success and updated_settings:
+            social_fields = ['facebook_embed_enabled', 'facebook_page_url', 'instagram_embed_code', 'custom_embed_code']
+            for field in social_fields:
+                if field in updated_settings and updated_settings[field] == settings_data[field]:
+                    self.log_result(f"Social media field {field} saved correctly", True)
+                else:
+                    self.log_result(f"Social media field {field} not saved correctly", False, 
+                                  f"Expected {settings_data[field]}, got {updated_settings.get(field)}")
         
         # Test deletion endpoints
         if news_id:

@@ -1,6 +1,7 @@
 import Header from "../components/Header";
 import HeroSection from "../components/HeroSection";
 import NewsSection from "../components/NewsSection";
+import SocialFeedSection from "../components/SocialFeedSection";
 import TeamSection from "../components/TeamSection";
 import MatchCalendar from "../components/MatchCalendar";
 import GallerySection from "../components/GallerySection";
@@ -13,6 +14,7 @@ export default function HomePage() {
       <Header />
       <HeroSection />
       <NewsSection />
+      <SocialFeedSection />
       <TeamSection />
       <MatchCalendar />
       <GallerySection />

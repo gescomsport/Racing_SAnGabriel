@@ -131,6 +131,12 @@ class SettingsUpdate(BaseModel):
     facebook_url: Optional[str] = None
     instagram_username: Optional[str] = None
     facebook_page: Optional[str] = None
+    # Social feed integration
+    facebook_embed_enabled: Optional[bool] = None
+    facebook_page_url: Optional[str] = None
+    instagram_embed_code: Optional[str] = None
+    social_feed_provider: Optional[str] = None
+    custom_embed_code: Optional[str] = None
 
 # Create app
 app = FastAPI()
@@ -331,7 +337,12 @@ async def get_settings():
             "instagram_url": "https://www.instagram.com/racingsangabrieladc/",
             "facebook_url": "https://www.facebook.com/RacingSanGabrielADC/",
             "instagram_username": "racingsangabrieladc",
-            "facebook_page": "RacingSanGabrielADC"
+            "facebook_page": "RacingSanGabrielADC",
+            "facebook_embed_enabled": True,
+            "facebook_page_url": "https://www.facebook.com/RacingSanGabrielADC/",
+            "instagram_embed_code": "",
+            "social_feed_provider": "none",
+            "custom_embed_code": ""
         }
         await db.settings.insert_one(settings)
         settings.pop("_id", None)

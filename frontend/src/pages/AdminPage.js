@@ -4,7 +4,8 @@ import { useAuth } from "../contexts/AuthContext";
 import axios from "axios";
 import {
   LayoutDashboard, Newspaper, Users, CalendarDays, Images,
-  Mail, Settings, LogOut, Plus, Trash2, Edit, ChevronRight, Menu, X
+  Mail, Settings, LogOut, Plus, Trash2, Edit, ChevronRight, Menu, X,
+  Rss, Instagram, Facebook, ExternalLink, Info, CheckCircle, Copy, Eye
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -17,12 +18,14 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "../components/ui/select";
+import SocialMediaManager from "../components/SocialMediaManager";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const ax = axios.create({ baseURL: API, withCredentials: true });
 
 const sidebarItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "social", label: "Redes Sociales", icon: Rss },
   { id: "news", label: "Noticias", icon: Newspaper },
   { id: "teams", label: "Equipos", icon: Users },
   { id: "matches", label: "Partidos", icon: CalendarDays },
@@ -110,6 +113,7 @@ export default function AdminPage() {
       {/* Content */}
       <main className="flex-1 p-4 lg:p-8 overflow-auto" data-testid="admin-content">
         {section === "dashboard" && <DashboardSection news={news} teams={teams} matches={matches} contacts={contacts} />}
+        {section === "social" && <SocialMediaManager />}
         {section === "news" && <NewsManager news={news} onRefresh={loadData} />}
         {section === "teams" && <TeamsManager teams={teams} onRefresh={loadData} />}
         {section === "matches" && <MatchesManager matches={matches} onRefresh={loadData} />}
@@ -468,6 +472,7 @@ function ContactsManager({ contacts, onRefresh }) {
     </div>
   );
 }
+
 
 function SettingsManager({ settings, onRefresh }) {
   const [form, setForm] = useState(settings);
