@@ -1,0 +1,95 @@
+{
+  "theme": "Light",
+  "archetype": "Archetype 4 (Swiss & High-Contrast) - Modified for Premium Athletic Club",
+  "typography": {
+    "headings": {
+      "font_family": "Outfit, sans-serif",
+      "weights": ["700", "800", "900"],
+      "usage": "Use for H1, H2, H3. Apply tracking-tighter for a bold, athletic, professional feel.",
+      "import_url": "https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&display=swap"
+    },
+    "body": {
+      "font_family": "Manrope, sans-serif",
+      "weights": ["400", "500", "600"],
+      "usage": "Use for all body text, paragraphs, labels, and table content.",
+      "import_url": "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap"
+    }
+  },
+  "colors": {
+    "primary": "#00296B",
+    "primary_hover": "#001D4A",
+    "secondary": "#2460FF",
+    "background_base": "#FFFFFF",
+    "background_alt": "#F4F7FB",
+    "text_main": "#0F172A",
+    "text_muted": "#475569",
+    "border": "#E2E8F0"
+  },
+  "spacing_and_layout": {
+    "padding_scale": "Apply generous spacing (p-8, p-12, p-20).",
+    "grid_strategy": "MODE A (TETRIS GRID) for Front/Marketing pages (Hero, Gallery) for high visual tension and asymmetry. MODE B (CONTROL ROOM GRID) for the Admin Dashboard and Match Calendars.",
+    "alignment": "Prioritize left-alignment for dense content and text. Avoid center-aligning paragraphs.",
+    "components": "Go cardless where possible with flat surfaces. Use Shadcn components for dynamic UI logic, customized to the club's clean blue/white palette."
+  },
+  "motion_and_interactions": {
+    "hover_states": "Buttons and links MUST have explicit hover state changes (e.g., bg-[#2460FF] to bg-[#00296B]). Contrast must remain WCAG AA compliant.",
+    "transitions": "Use snappy, energetic transition timings (0.15s ease) suited for sports."
+  },
+  "icons_library": "lucide-react",
+  "image_urls": [
+    {
+      "url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/5w55i820_Racing%20San%20Gabriel.svg",
+      "category": "logo",
+      "description": "Club Logo / Badge (Primary brand mark. Use SVG for crispness in header and footer)."
+    },
+    {
+      "url": "https://static.prod-images.emergentagent.com/jobs/aa4aac70-2da7-49b9-b970-59a86d8b85ed/images/682e19316c70353e5239c60498f15f96abc81c8407903b301b74f7e1879187b1.png",
+      "category": "hero_background",
+      "description": "Abstract Blue/White atmospheric texture. Ideal for the main Hero Section backdrop or general large banners."
+    },
+    {
+      "url": "https://static.prod-images.emergentagent.com/jobs/aa4aac70-2da7-49b9-b970-59a86d8b85ed/images/2e97b7f318b408c34d0d83e3483ffb1fb1d9ea389c42fb72c00f0fdd9219dad4.png",
+      "category": "hero_feature",
+      "description": "Cinematic football stadium. Excellent for a prominent 'Bento Grid' image tile."
+    },
+    {
+      "url": "https://images.pexels.com/photos/36213470/pexels-photo-36213470.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "category": "gallery",
+      "description": "Soccer action shot for the club's gallery or teams page."
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1761156896754-ef4be8c857f6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDZ8MHwxfHNlYXJjaHwyfHx0ZW5uaXMlMjBtYXRjaCUyMG91dGRvb3J8ZW58MHx8fHwxNzc2MjY0NDAzfDA&ixlib=rb-4.1.0&q=85",
+      "category": "gallery",
+      "description": "Tennis scoreboard / match context, representing the club's multi-sport nature."
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1774442511806-63033c5f521d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDZ8MHwxfHNlYXJjaHwxfHx0ZW5uaXMlMjBtYXRjaCUyMG91dGRvb3J8ZW58MHx8fHwxNzc2MjY0NDAzfDA&ixlib=rb-4.1.0&q=85",
+      "category": "gallery",
+      "description": "Outdoor tennis courts representing club facilities."
+    }
+  ],
+  "pages_and_sections": {
+    "Global": {
+      "Header": "Sticky, glassmorphism or solid white background, incorporating the SVG logo. Must include navigation to all sections.",
+      "Footer": "Dark theme footer (bg-[#00296B]) for high contrast. Large club branding and essential links."
+    },
+    "Home": {
+      "Hero": "Asymmetric Bento grid. Large typography. Use hero_background and hero_feature images.",
+      "News_Social": "Social Feed Integration showing mock Instagram (@racingsangabrieladc) and Facebook posts in a clean grid.",
+      "Team_Roster": "Clear roster using custom Shadcn cards or a well-spaced table. Flat surfaces, minimal shadows.",
+      "Calendar": "Control Room grid. High-density match schedule showing dates, times, and teams.",
+      "Gallery": "Asymmetric bento grid for the provided sports action photos.",
+      "Contact": "A crisp, high-contrast registration/contact form with strong blue CTAs."
+    },
+    "Admin_Panel": "Dense, highly functional CRUD interfaces (News, Teams, Matches). Flat backgrounds, 1px subtle borders. Use Shadcn Table and Form."
+  },
+  "instructions_to_main_agent": [
+    "Build a full-stack App (React + FastAPI) acting as the sports club template.",
+    "Implement the 'Outfit' (headings) and 'Manrope' (body) fonts.",
+    "For the UI, strictly use the defined Blue and White colors. Avoid using default gray shadows; use 1px solid borders for definition instead.",
+    "Implement a 'Bento Grid' strategy for the Home page to avoid boring full-width stacked rows. Ensure high visual interest.",
+    "The admin panel should be clean and dense, supporting CRUD for News, Teams, and Matches.",
+    "For the social media section, create stylized mock UI components that look like Instagram and Facebook feeds displaying the club's content.",
+    "CRITICAL: All interactive and key informational elements (buttons, links, form inputs) MUST include a 'data-testid' attribute (e.g. data-testid=\"submit-contact-button\")."
+  ]
+}
