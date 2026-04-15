@@ -23,7 +23,7 @@ export default function SocialMediaManager() {
     instagram_username: "",
   });
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState("facebook");
+  const [activeTab, setActiveTab] = useState("automatizacion");
 
   useEffect(() => {
     ax.get("/settings").then(r => {
@@ -60,19 +60,19 @@ export default function SocialMediaManager() {
 
       {/* Quick Guide Banner */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
-        <h3 className="font-heading font-bold text-[#00296B] text-sm mb-2">Como funciona (3 pasos rapidos)</h3>
+        <h3 className="font-heading font-bold text-[#00296B] text-sm mb-2">Como funciona - Publica en redes y la web se actualiza sola</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
           <div className="flex items-start gap-2">
             <span className="bg-[#2460FF] text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shrink-0">1</span>
-            <p className="text-[#475569]"><strong>Facebook:</strong> Ya esta activo. Solo necesitas la URL de tu pagina.</p>
+            <p className="text-[#475569]"><strong>Conecta Make.com</strong> con tu Instagram y Facebook (una vez, 15 min)</p>
           </div>
           <div className="flex items-start gap-2">
             <span className="bg-[#E1306C] text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shrink-0">2</span>
-            <p className="text-[#475569]"><strong>Instagram:</strong> Crea cuenta gratis en Elfsight, conecta tu Instagram, copia el codigo y pegalo aqui.</p>
+            <p className="text-[#475569]"><strong>Publica en redes</strong> como siempre desde el movil</p>
           </div>
           <div className="flex items-start gap-2">
             <span className="bg-green-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shrink-0">3</span>
-            <p className="text-[#475569]"><strong>Guarda</strong> y las publicaciones aparecen automaticamente en la web.</p>
+            <p className="text-[#475569]"><strong>Aparece en la web</strong> automaticamente en 15 minutos</p>
           </div>
         </div>
       </div>
@@ -94,20 +94,27 @@ export default function SocialMediaManager() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-[#F4F7FB] p-1 rounded-lg w-fit">
+      <div className="flex gap-1 mb-6 bg-[#F4F7FB] p-1 rounded-lg w-fit flex-wrap">
+        <button
+          onClick={() => setActiveTab("automatizacion")}
+          className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${activeTab === "automatizacion" ? "bg-white font-medium shadow-sm text-[#00296B]" : "text-[#475569] hover:text-[#00296B]"}`}
+          data-testid="social-tab-automatizacion"
+        >
+          <Rss size={14} className="text-green-500" /> Make.com (Recomendado)
+        </button>
         <button
           onClick={() => setActiveTab("facebook")}
           className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${activeTab === "facebook" ? "bg-white font-medium shadow-sm text-[#00296B]" : "text-[#475569] hover:text-[#00296B]"}`}
           data-testid="social-tab-facebook"
         >
-          <Facebook size={14} className="text-[#1877F2]" /> Facebook
+          <Facebook size={14} className="text-[#1877F2]" /> Facebook Embed
         </button>
         <button
           onClick={() => setActiveTab("instagram")}
           className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${activeTab === "instagram" ? "bg-white font-medium shadow-sm text-[#00296B]" : "text-[#475569] hover:text-[#00296B]"}`}
           data-testid="social-tab-instagram"
         >
-          <Instagram size={14} className="text-[#E1306C]" /> Instagram
+          <Instagram size={14} className="text-[#E1306C]" /> Instagram Embed
         </button>
         <button
           onClick={() => setActiveTab("multi")}
@@ -117,6 +124,122 @@ export default function SocialMediaManager() {
           <Rss size={14} className="text-[#2460FF]" /> Feed Completo
         </button>
       </div>
+
+      {/* Automatizacion Tab - Make.com */}
+      {activeTab === "automatizacion" && (
+        <div className="space-y-5" data-testid="social-automatizacion-config">
+          {/* Webhook Info Box */}
+          <div className="bg-white rounded-xl border border-[#E2E8F0] p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Rss size={20} className="text-green-500" />
+              <h3 className="font-heading font-bold text-[#00296B]">Automatizacion con Make.com</h3>
+              <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">Gratis - Recomendado</span>
+            </div>
+            <p className="text-sm text-[#475569] mb-5">
+              Con Make.com, cada vez que publiques en Instagram o Facebook desde el movil,
+              la publicacion aparece automaticamente en la web en 15 minutos. <strong>Cero mantenimiento.</strong>
+            </p>
+
+            {/* Webhook credentials */}
+            <div className="bg-[#0F172A] rounded-lg p-5 mb-5">
+              <h4 className="text-sm font-bold text-white mb-3">Datos para configurar Make.com</h4>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Webhook URL (copiar y pegar en Make.com):</p>
+                  <div className="bg-[#1E293B] rounded p-2 flex items-center justify-between">
+                    <code className="text-green-400 text-xs break-all">{process.env.REACT_APP_BACKEND_URL}/api/webhook/social-post</code>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">API Key (para seguridad):</p>
+                  <div className="bg-[#1E293B] rounded p-2">
+                    <code className="text-amber-400 text-xs">rsg-webhook-2025-secret</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Step by step */}
+            <h4 className="font-heading font-bold text-[#00296B] text-sm mb-3">Pasos para configurar (15 minutos, una sola vez)</h4>
+            
+            <div className="space-y-4">
+              <StepBlock num="1" title="Preparar Instagram" color="bg-[#E1306C]">
+                <ul className="text-xs text-[#475569] space-y-1 list-disc pl-4">
+                  <li>Instagram debe ser <strong>cuenta Business o Creator</strong> (no personal)</li>
+                  <li>Debe estar <strong>vinculada a la pagina de Facebook</strong> del club</li>
+                  <li>Se cambia en: Instagram &gt; Configuracion &gt; Cuenta &gt; Cambiar a cuenta profesional</li>
+                </ul>
+              </StepBlock>
+
+              <StepBlock num="2" title="Crear cuenta en Make.com" color="bg-[#2460FF]">
+                <ul className="text-xs text-[#475569] space-y-1 list-disc pl-4">
+                  <li>Ve a <a href="https://www.make.com" target="_blank" rel="noopener noreferrer" className="text-[#2460FF] underline">make.com</a> y crea cuenta gratuita</li>
+                  <li>Plan gratis = 1.000 operaciones/mes (mas que suficiente)</li>
+                  <li>No necesitas tarjeta de credito</li>
+                </ul>
+              </StepBlock>
+
+              <StepBlock num="3" title="Crear escenario de Instagram" color="bg-[#E1306C]">
+                <ul className="text-xs text-[#475569] space-y-1 list-disc pl-4">
+                  <li>Scenarios &gt; Create new scenario</li>
+                  <li>Modulo 1: <strong>Instagram for Business &gt; Watch Media</strong></li>
+                  <li>Conecta tu cuenta de Instagram (via Facebook)</li>
+                  <li>Modulo 2: <strong>HTTP &gt; Make a request</strong></li>
+                  <li>URL: el webhook de arriba | Method: POST | Body: JSON</li>
+                  <li>En el body mapea: source=instagram, content=caption, image_url=mediaUrl, post_url=permalink</li>
+                  <li>Activa y pon frecuencia cada 15 minutos</li>
+                </ul>
+              </StepBlock>
+
+              <StepBlock num="4" title="Crear escenario de Facebook" color="bg-[#1877F2]">
+                <ul className="text-xs text-[#475569] space-y-1 list-disc pl-4">
+                  <li>Igual que Instagram pero con: <strong>Facebook Pages &gt; Watch Posts</strong></li>
+                  <li>En el body mapea: source=facebook, content=message, image_url=fullPicture, post_url=permalinkUrl</li>
+                  <li>Activa y pon frecuencia cada 15 minutos</li>
+                </ul>
+              </StepBlock>
+
+              <StepBlock num="5" title="Listo - Olvidate" color="bg-green-500">
+                <p className="text-xs text-[#475569]">
+                  A partir de ahora, cada vez que publiques en Instagram o Facebook, la web se actualiza sola.
+                  No hay que tocar nada mas. Funciona para siempre.
+                </p>
+              </StepBlock>
+            </div>
+
+            {/* JSON template for Make.com */}
+            <div className="mt-5 border border-[#E2E8F0] rounded-lg p-4">
+              <h4 className="font-heading font-bold text-[#00296B] text-sm mb-2">Plantilla JSON para Instagram (copiar en Make.com)</h4>
+              <pre className="bg-[#F4F7FB] rounded p-3 text-xs text-[#0F172A] overflow-x-auto whitespace-pre-wrap">
+{`{
+  "source": "instagram",
+  "content": "{{1.caption}}",
+  "image_url": "{{1.mediaUrl}}",
+  "post_url": "{{1.permalink}}",
+  "author": "@racingsangabrieladc",
+  "timestamp": "{{1.timestamp}}",
+  "api_key": "rsg-webhook-2025-secret"
+}`}
+              </pre>
+            </div>
+
+            <div className="mt-3 border border-[#E2E8F0] rounded-lg p-4">
+              <h4 className="font-heading font-bold text-[#00296B] text-sm mb-2">Plantilla JSON para Facebook (copiar en Make.com)</h4>
+              <pre className="bg-[#F4F7FB] rounded p-3 text-xs text-[#0F172A] overflow-x-auto whitespace-pre-wrap">
+{`{
+  "source": "facebook",
+  "content": "{{1.message}}",
+  "image_url": "{{1.fullPicture}}",
+  "post_url": "{{1.permalinkUrl}}",
+  "author": "Racing San Gabriel ADC",
+  "timestamp": "{{1.createdTime}}",
+  "api_key": "rsg-webhook-2025-secret"
+}`}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Facebook Tab */}
       {activeTab === "facebook" && (
@@ -318,3 +441,16 @@ function StepItem({ num, title, desc, color = "bg-[#2460FF]" }) {
     </div>
   );
 }
+
+function StepBlock({ num, title, color = "bg-[#2460FF]", children }) {
+  return (
+    <div className="flex items-start gap-3 border border-[#E2E8F0] rounded-lg p-4">
+      <span className={`${color} text-white text-xs font-bold w-7 h-7 rounded-full flex items-center justify-center shrink-0`}>{num}</span>
+      <div className="flex-1">
+        <p className="text-sm font-bold text-[#00296B] mb-1">{title}</p>
+        {children}
+      </div>
+    </div>
+  );
+}
+
