@@ -36,7 +36,7 @@ export default function Header() {
           <Link to="/" className="flex items-center gap-3" data-testid="header-logo-link">
             <img src={LOGO_URL} alt="RSGADC" className="h-10 w-10" />
             <span className="font-heading font-bold text-[#00296B] text-lg tracking-tight hidden sm:block">
-              Racing San Gabriel ADC
+              Racing San Gabriel A.D.C.
             </span>
           </Link>
 

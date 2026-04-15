@@ -54,9 +54,28 @@ export default function SocialMediaManager() {
   return (
     <div data-testid="admin-social-manager">
       <h2 className="font-heading font-bold text-[#00296B] text-xl mb-2">Redes Sociales</h2>
-      <p className="text-sm text-[#475569] mb-6">
-        Configura la integracion automatica de tus redes sociales en la web. Las publicaciones se mostraran en tiempo real.
+      <p className="text-sm text-[#475569] mb-4">
+        Configura tus redes sociales para que las publicaciones aparezcan automaticamente en la web.
       </p>
+
+      {/* Quick Guide Banner */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
+        <h3 className="font-heading font-bold text-[#00296B] text-sm mb-2">Como funciona (3 pasos rapidos)</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+          <div className="flex items-start gap-2">
+            <span className="bg-[#2460FF] text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shrink-0">1</span>
+            <p className="text-[#475569]"><strong>Facebook:</strong> Ya esta activo. Solo necesitas la URL de tu pagina.</p>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="bg-[#E1306C] text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shrink-0">2</span>
+            <p className="text-[#475569]"><strong>Instagram:</strong> Crea cuenta gratis en Elfsight, conecta tu Instagram, copia el codigo y pegalo aqui.</p>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="bg-green-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shrink-0">3</span>
+            <p className="text-[#475569]"><strong>Guarda</strong> y las publicaciones aparecen automaticamente en la web.</p>
+          </div>
+        </div>
+      </div>
 
       {/* Status Banner */}
       <div className="bg-white rounded-xl border border-[#E2E8F0] p-4 mb-6 flex flex-wrap items-center gap-4">

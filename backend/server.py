@@ -329,11 +329,11 @@ async def get_settings():
     if not settings:
         settings = {
             "type": "club",
-            "club_name": "Racing San Gabriel ADC",
-            "description": "Club deportivo multidisciplinar comprometido con el desarrollo deportivo y social de nuestra comunidad.",
-            "address": "San Gabriel, Alicante",
-            "phone": "+34 600 000 000",
-            "email": "info@racingsangabriel.es",
+            "club_name": "Racing San Gabriel A.D.C.",
+            "description": "Escuela de futbol de referencia en Alicante. Ubicada en el corazon de Alacant, ofrecemos una experiencia deportiva de primer nivel. Futbol base, futbol femenino, futbol sala y mucho mas.",
+            "address": "Carrer Racing San Gabriel, 39, 03008 Alacant, Alicante",
+            "phone": "+34 617 50 27 80",
+            "email": "racingsangabrieladc@hotmail.com",
             "instagram_url": "https://www.instagram.com/racingsangabrieladc/",
             "facebook_url": "https://www.facebook.com/RacingSanGabrielADC/",
             "instagram_username": "racingsangabrieladc",
@@ -342,7 +342,8 @@ async def get_settings():
             "facebook_page_url": "https://www.facebook.com/RacingSanGabrielADC/",
             "instagram_embed_code": "",
             "social_feed_provider": "none",
-            "custom_embed_code": ""
+            "custom_embed_code": "",
+            "schedule": "Lunes a Sabado: 9:00 - 21:00 | Domingo: Cerrado"
         }
         await db.settings.insert_one(settings)
         settings.pop("_id", None)
@@ -405,9 +406,20 @@ async def seed_demo_data():
     count = await db.teams.count_documents({})
     if count == 0:
         teams = [
-            {"id": str(uuid.uuid4()), "name": "Juvenil A", "category": "Juvenil", "coach": "Carlos Martinez", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "description": "Equipo juvenil categoría A", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Cadete B", "category": "Cadete", "coach": "Miguel Lopez", "image_url": "", "description": "Equipo cadete categoría B", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Infantil A", "category": "Infantil", "coach": "Ana Garcia", "image_url": "", "description": "Equipo infantil categoría A", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Alevin A", "category": "Alevin", "coach": "", "image_url": "", "description": "Equipo alevin categoria A", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Alevin B", "category": "Alevin", "coach": "", "image_url": "", "description": "Equipo alevin categoria B", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Benjamin A", "category": "Benjamin", "coach": "", "image_url": "", "description": "Equipo benjamin categoria A", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Benjamin B", "category": "Benjamin", "coach": "", "image_url": "", "description": "Equipo benjamin categoria B", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Cadete", "category": "Cadete", "coach": "", "image_url": "", "description": "Equipo cadete", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Escuela Iniciacion", "category": "Escuela", "coach": "", "image_url": "", "description": "Escuela de iniciacion al futbol", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Futbol Femenino", "category": "Femenino", "coach": "", "image_url": "", "description": "4 equipos de futbol femenino", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Futbol Sala Senior", "category": "Futbol Sala", "coach": "", "image_url": "", "description": "Equipo de futbol sala senior", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Infantil A", "category": "Infantil", "coach": "", "image_url": "", "description": "Equipo infantil categoria A", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Infantil B", "category": "Infantil", "coach": "", "image_url": "", "description": "Equipo infantil categoria B", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Juvenil A", "category": "Juvenil", "coach": "", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "description": "Equipo juvenil categoria A", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Juvenil B", "category": "Juvenil", "coach": "", "image_url": "", "description": "Equipo juvenil categoria B", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Prebenjamin", "category": "Prebenjamin", "coach": "", "image_url": "", "description": "Equipo prebenjamin", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Senior", "category": "Senior", "coach": "", "image_url": "", "description": "Equipo senior", "created_at": datetime.now(timezone.utc).isoformat()},
         ]
         await db.teams.insert_many(teams)
 
@@ -425,9 +437,9 @@ async def seed_demo_data():
     count = await db.news.count_documents({})
     if count == 0:
         news = [
-            {"id": str(uuid.uuid4()), "title": "Gran victoria del Juvenil A", "content": "Nuestro equipo juvenil consiguió una importante victoria este fin de semana frente al CD Alicante con un resultado de 2-1. Gran trabajo de todo el equipo.", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "source": "web", "category": "resultados", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "title": "Abiertas las inscripciones temporada 2025/2026", "content": "Ya están abiertas las inscripciones para la próxima temporada. Contacta con nosotros para más información sobre las categorías disponibles.", "image_url": "", "source": "web", "category": "general", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "title": "Torneo de Navidad", "content": "El club organiza el tradicional torneo de Navidad para todas las categorías. ¡No te lo pierdas!", "image_url": "", "source": "instagram", "category": "eventos", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "title": "Inscripciones abiertas temporada 2025/2026", "content": "Ya puedes inscribirte en cualquiera de nuestras categorias: desde Prebenjamin hasta Senior, pasando por Futbol Femenino y Futbol Sala. Contactanos en el 617 50 27 80 o en racingsangabrieladc@hotmail.com", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "source": "web", "category": "general", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "title": "Futbol femenino en auge", "content": "Nuestro club cuenta ya con 4 equipos de futbol femenino. Seguimos creciendo y apostando por el deporte femenino en Alicante. Si quieres unirte, contactanos.", "image_url": "https://images.unsplash.com/photo-1652190416554-c46af8a0ff50?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHw0fHxzb2NjZXIlMjBmb290YmFsbCUyMGZpZWxkJTIwdHJhaW5pbmd8ZW58MHx8fHwxNzc2MjY4MjIwfDA&ixlib=rb-4.1.0&q=85", "source": "web", "category": "general", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "title": "Nuevas actividades en la Sala Multiactividad", "content": "Ademas de futbol, en nuestra sede ofrecemos clases de Zumba, Fitness y Pilates en la Sala Multiactividad. Consulta horarios en la sede.", "image_url": "", "source": "web", "category": "eventos", "created_at": datetime.now(timezone.utc).isoformat()},
         ]
         await db.news.insert_many(news)
 

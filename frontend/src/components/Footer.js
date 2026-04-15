@@ -13,11 +13,11 @@ export default function Footer() {
               <img src={LOGO_URL} alt="RSGADC" className="h-12 w-12" />
               <div>
                 <h3 className="font-heading font-bold text-lg">Racing San Gabriel</h3>
-                <p className="text-sm text-blue-200">ADC</p>
+                <p className="text-sm text-blue-200">A.D.C.</p>
               </div>
             </div>
             <p className="text-sm text-blue-200 leading-relaxed">
-              Club deportivo multidisciplinar comprometido con el desarrollo deportivo y social de nuestra comunidad.
+              Escuela de futbol de referencia en Alicante. Futbol base, futbol femenino, futbol sala y mucho mas. Valoracion Google: 4.2/5
             </p>
           </div>
 
@@ -47,15 +47,15 @@ export default function Footer() {
             <div className="space-y-3">
               <div className="flex items-start gap-2 text-sm text-blue-200">
                 <MapPin size={16} className="mt-0.5 shrink-0" />
-                <span>San Gabriel, Alicante</span>
+                <span>Carrer Racing San Gabriel, 39, 03008 Alacant, Alicante</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-blue-200">
                 <Phone size={16} className="shrink-0" />
-                <span>+34 600 000 000</span>
+                <span>+34 617 50 27 80</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-blue-200">
                 <Mail size={16} className="shrink-0" />
-                <span>info@racingsangabriel.es</span>
+                <span>racingsangabrieladc@hotmail.com</span>
               </div>
               <div className="flex items-center gap-3 mt-4">
                 <a href="https://www.instagram.com/racingsangabrieladc/" target="_blank" rel="noopener noreferrer"

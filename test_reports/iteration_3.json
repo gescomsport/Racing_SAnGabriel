@@ -1,0 +1,44 @@
+{
+  "summary": "Comprehensive testing of Racing San Gabriel A.D.C. website with real club data. Backend APIs working perfectly (51/51 tests passed). Frontend displays real club data correctly. All 14 team categories shown. Contact form functional. Minor admin session management issue identified.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Admin session management",
+        "issue": "Admin session expires quickly, making it difficult to navigate between admin sections",
+        "affected_selectors": ["admin dashboard navigation"],
+        "fix_priority": "MEDIUM"
+      }
+    ],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend health check",
+    "GET /api/settings returns real club data (phone +34 617 50 27 80, email racingsangabrieladc@hotmail.com, address Carrer Racing San Gabriel 39)",
+    "GET /api/teams returns 14 real teams",
+    "Homepage loads with Racing San Gabriel A.D.C. in header",
+    "Contact section shows real address, phone, email",
+    "Footer shows real data",
+    "All 14 team categories displayed on homepage",
+    "Admin login works (admin@racingsangabriel.es / Racing2025!)",
+    "Contact form submission works",
+    "Social feed section renders on homepage",
+    "Backend authentication and authorization",
+    "All CRUD operations for news, teams, matches, gallery",
+    "Contact form backend integration",
+    "Settings update including social media fields"
+  ],
+  "test_report_links": ["/app/backend_test.py"],
+  "success_percentage": {
+    "backend": "100% (51/51 tests passed)",
+    "frontend": "95% (minor session issue)"
+  },
+  "updated_files": [],
+  "action_item_for_main_agent": "",
+  "should_call_test_agent_after_fix": "false",
+  "should_main_agent_test_itself": "true"
+}

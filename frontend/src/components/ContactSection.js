@@ -43,17 +43,17 @@ export default function ContactSection() {
               Ponte en contacto con nosotros
             </h2>
             <p className="text-[#475569] leading-relaxed mb-8">
-              ¿Quieres formar parte de nuestro club? ¿Tienes alguna pregunta? Rellena el formulario y nos pondremos en contacto contigo lo antes posible.
+              Quieres formar parte de nuestro club? Tienes alguna pregunta? Rellena el formulario o contactanos directamente. Horario: Lunes a Sabado de 9:00 a 21:00.
             </p>
 
             <div className="space-y-4">
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3">
                 <div className="bg-[#00296B] p-2 rounded-lg">
                   <MapPin size={18} className="text-white" />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-[#0F172A]">Direccion</p>
-                  <p className="text-sm text-[#475569]">San Gabriel, Alicante</p>
+                  <p className="text-sm text-[#475569]">Carrer Racing San Gabriel, 39, 03008 Alacant, Alicante</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -62,7 +62,7 @@ export default function ContactSection() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-[#0F172A]">Telefono</p>
-                  <p className="text-sm text-[#475569]">+34 600 000 000</p>
+                  <p className="text-sm text-[#475569]">+34 617 50 27 80</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -71,7 +71,7 @@ export default function ContactSection() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-[#0F172A]">Email</p>
-                  <p className="text-sm text-[#475569]">info@racingsangabriel.es</p>
+                  <p className="text-sm text-[#475569]">racingsangabrieladc@hotmail.com</p>
                 </div>
               </div>
             </div>

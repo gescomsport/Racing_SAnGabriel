@@ -32,11 +32,11 @@ export default function HeroSection() {
                 <h1 className="font-heading font-black text-white text-4xl sm:text-5xl lg:text-6xl tracking-tighter leading-none">
                   Racing<br />San Gabriel
                 </h1>
-                <p className="text-blue-200 font-heading font-bold text-lg mt-1">ADC</p>
+                <p className="text-blue-200 font-heading font-bold text-lg mt-1">A.D.C.</p>
               </div>
             </div>
             <p className="text-blue-100 text-base lg:text-lg max-w-xl leading-relaxed mb-8">
-              Club deportivo multidisciplinar comprometido con el desarrollo deportivo y social de nuestra comunidad en San Gabriel, Alicante.
+              Escuela de futbol de referencia en Alicante. Ubicada en el corazon de Alacant, ofrecemos experiencia deportiva de primer nivel. Futbol base, futbol femenino, futbol sala y mucho mas.
             </p>
             <div className="flex flex-wrap gap-3">
               <Button
