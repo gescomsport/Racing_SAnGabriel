@@ -9,6 +9,7 @@ const navItems = [
   { label: "Inicio", href: "#hero" },
   { label: "Noticias", href: "#noticias" },
   { label: "Equipos", href: "#equipos" },
+  { label: "Horarios", href: "#horarios" },
   { label: "Calendario", href: "#calendario" },
   { label: "Galeria", href: "#galeria" },
   { label: "Contacto", href: "#contacto" },

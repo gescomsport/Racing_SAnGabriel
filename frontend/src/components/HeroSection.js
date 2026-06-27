@@ -1,5 +1,6 @@
-import { ChevronDown, Instagram, Facebook } from "lucide-react";
+import { ChevronDown, Instagram, Facebook, UserPlus, Star } from "lucide-react";
 import { Button } from "../components/ui/button";
+import { Link } from "react-router-dom";
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/3hoft56y_Racing%20San%20Gabriel.png";
 const HERO_BG = "https://static.prod-images.emergentagent.com/jobs/aa4aac70-2da7-49b9-b970-59a86d8b85ed/images/682e19316c70353e5239c60498f15f96abc81c8407903b301b74f7e1879187b1.png";
@@ -39,20 +40,30 @@ export default function HeroSection() {
               Escuela de futbol de referencia en Alicante. Ubicada en el corazon de Alacant, ofrecemos experiencia deportiva de primer nivel. Futbol base, futbol femenino, futbol sala y mucho mas.
             </p>
             <div className="flex flex-wrap gap-3">
+              <Link to="/inscripcion">
+                <Button
+                  className="bg-[#2460FF] hover:bg-[#00296B] text-white font-heading font-bold px-6 py-3 rounded-full transition-colors duration-150"
+                  data-testid="hero-cta-registration"
+                >
+                  <UserPlus size={16} className="mr-2" /> Inscripción online
+                </Button>
+              </Link>
+              <Link to="/alta-socio">
+                <Button
+                  variant="outline"
+                  className="border-white/30 text-white hover:bg-white/10 font-heading font-bold px-6 py-3 rounded-full transition-colors duration-150"
+                  data-testid="hero-cta-member"
+                >
+                  <Star size={16} className="mr-2" /> Hazte socio
+                </Button>
+              </Link>
               <Button
                 onClick={() => scrollToSection("#contacto")}
-                className="bg-[#2460FF] hover:bg-[#00296B] text-white font-heading font-bold px-6 py-3 rounded-full transition-colors duration-150"
+                variant="ghost"
+                className="text-blue-200 hover:text-white hover:bg-white/10 font-heading font-bold px-6 py-3 rounded-full transition-colors duration-150"
                 data-testid="hero-cta-contact"
               >
                 Contactar
-              </Button>
-              <Button
-                onClick={() => scrollToSection("#noticias")}
-                variant="outline"
-                className="border-white/30 text-white hover:bg-white/10 font-heading font-bold px-6 py-3 rounded-full transition-colors duration-150"
-                data-testid="hero-cta-news"
-              >
-                Ver Noticias
               </Button>
             </div>
           </div>

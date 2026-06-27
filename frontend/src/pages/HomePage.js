@@ -3,6 +3,7 @@ import HeroSection from "../components/HeroSection";
 import SocialPostsSection from "../components/SocialPostsSection";
 import SocialFeedSection from "../components/SocialFeedSection";
 import TeamSection from "../components/TeamSection";
+import TrainingScheduleSection from "../components/TrainingScheduleSection";
 import MatchCalendar from "../components/MatchCalendar";
 import GallerySection from "../components/GallerySection";
 import ContactSection from "../components/ContactSection";
@@ -16,6 +17,7 @@ export default function HomePage() {
       <SocialPostsSection />
       <SocialFeedSection />
       <TeamSection />
+      <TrainingScheduleSection />
       <MatchCalendar />
       <GallerySection />
       <ContactSection />
