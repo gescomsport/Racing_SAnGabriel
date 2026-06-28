@@ -259,6 +259,78 @@ function TemplateFormBody({ name, setName, rows, addRow, removeRow, setRow, team
   );
 }
 
+// ── Month View ────────────────────────────────────────────────────────────────
+function MonthView({ monthDate, events, teams, onEdit, onDelete }) {
+  const teamMap = Object.fromEntries(teams.map(t => [t.id, t.name]));
+
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+
+  // First Monday on or before the 1st of the month
+  const firstDay = new Date(year, month, 1);
+  const startOffset = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
+  const gridStart = new Date(firstDay);
+  gridStart.setDate(firstDay.getDate() - startOffset);
+
+  // Always 6 rows (42 cells)
+  const cells = Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    return d;
+  });
+
+  const eventsForDay = (d) => {
+    const ds = formatDate(d);
+    return events.filter(e => e.date === ds).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  };
+
+  const monthName = firstDay.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+  const todayStr = formatDate(new Date());
+
+  return (
+    <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
+      {/* Day headers */}
+      <div className="grid grid-cols-7 border-b border-[#E2E8F0] bg-[#F4F7FB]">
+        {DAYS_ES.map((d, i) => (
+          <div key={i} className="py-2 text-center text-xs font-bold text-[#475569] uppercase tracking-wide border-r border-[#F1F5F9] last:border-0">{d}</div>
+        ))}
+      </div>
+      {/* Calendar grid (6 rows × 7 cols) */}
+      <div className="grid grid-cols-7" style={{ gridAutoRows: "minmax(90px, auto)" }}>
+        {cells.map((d, i) => {
+          const isCurrentMonth = d.getMonth() === month;
+          const isToday = formatDate(d) === todayStr;
+          const dayEvts = eventsForDay(d);
+          return (
+            <div key={i}
+              className={`border-r border-b border-[#F1F5F9] last-of-type:border-r-0 p-1.5 flex flex-col gap-0.5 min-h-[90px] ${!isCurrentMonth ? "bg-[#FAFBFC]" : "bg-white"} ${isToday ? "ring-2 ring-inset ring-[#2460FF]/30" : ""}`}>
+              {/* Day number */}
+              <div className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full mb-0.5 self-start ${isToday ? "bg-[#2460FF] text-white" : isCurrentMonth ? "text-[#0F172A]" : "text-[#CBD5E1]"}`}>
+                {d.getDate()}
+              </div>
+              {/* Events */}
+              {dayEvts.slice(0, 3).map(ev => {
+                const et = EVENT_TYPES[ev.type] || EVENT_TYPES.evento;
+                return (
+                  <button key={ev.id}
+                    onClick={() => onEdit(ev)}
+                    className="w-full text-left rounded px-1.5 py-0.5 text-xs font-medium truncate leading-tight transition-opacity hover:opacity-80"
+                    style={{ background: et.dot + "20", color: et.dot, borderLeft: `2px solid ${et.dot}` }}>
+                    {ev.time ? `${ev.time.slice(0, 5)} ` : ""}{ev.title || et.label}
+                  </button>
+                );
+              })}
+              {dayEvts.length > 3 && (
+                <span className="text-xs text-[#94A3B8] pl-1">+{dayEvts.length - 3} más</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Week View ─────────────────────────────────────────────────────────────────
 function WeekView({ weekStart, events, teams, facilities, onDelete, onEdit }) {
   const teamMap = Object.fromEntries(teams.map(t => [t.id, t.name]));
@@ -312,6 +384,8 @@ function WeekView({ weekStart, events, teams, facilities, onDelete, onEdit }) {
 export default function CalendarManager() {
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const [events, setEvents] = useState([]);
+  const [monthEvents, setMonthEvents] = useState([]);
+  const [monthDate, setMonthDate] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [templates, setTemplates] = useState([]);
   const [teams, setTeams] = useState([]);
   const [facilities, setFacilities] = useState([]);
@@ -345,11 +419,28 @@ export default function CalendarManager() {
     setTemplates(tmr.data);
   }, [weekStart]);
 
+  const loadMonth = useCallback(async () => {
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    // Load from a week before month start to a week after month end (to cover grid overflow)
+    const from = formatDate(new Date(year, month, -6));
+    const to = formatDate(new Date(year, month + 1, 13));
+    try {
+      const r = await ax.get(`/schedule/events?date_from=${from}&date_to=${to}`);
+      setMonthEvents(r.data);
+    } catch {}
+  }, [monthDate]);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (tab === "month") loadMonth(); }, [tab, loadMonth]);
 
   const prevWeek = () => setWeekStart(d => addDays(d, -7));
   const nextWeek = () => setWeekStart(d => addDays(d, 7));
   const goToday = () => setWeekStart(getWeekStart(new Date()));
+
+  const prevMonth = () => setMonthDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  const nextMonth = () => setMonthDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+  const goTodayMonth = () => { const d = new Date(); d.setDate(1); setMonthDate(d); };
 
   const handleDeleteEvent = async (id) => {
     await ax.delete(`/schedule/events/${id}`);
@@ -422,13 +513,51 @@ export default function CalendarManager() {
 
       {/* Tab selector */}
       <div className="flex gap-2 mb-5">
-        {[{ id: "week", label: "Vista Semana" }, { id: "list", label: "Lista" }, { id: "templates", label: "Plantillas" }].map(t => (
+        {[
+          { id: "month", label: "Vista Mes" },
+          { id: "week", label: "Vista Semana" },
+          { id: "list", label: "Lista" },
+          { id: "templates", label: "Plantillas" },
+        ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${tab === t.id ? "bg-[#00296B] text-white" : "bg-white border border-[#E2E8F0] text-[#475569] hover:border-[#00296B]"}`}>
             {t.label}
           </button>
         ))}
       </div>
+
+      {/* Month navigation */}
+      {tab === "month" && (
+        <div className="bg-white rounded-xl border border-[#E2E8F0] p-3 mb-4 flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={prevMonth} className="h-8 w-8 p-0"><ChevronLeft size={14} /></Button>
+            <span className="font-bold text-[#00296B] text-sm min-w-40 text-center capitalize">
+              {monthDate.toLocaleDateString("es-ES", { month: "long", year: "numeric" })}
+            </span>
+            <Button variant="ghost" size="sm" onClick={nextMonth} className="h-8 w-8 p-0"><ChevronRight size={14} /></Button>
+          </div>
+          <Button variant="outline" size="sm" onClick={goTodayMonth} className="text-xs">Hoy</Button>
+          <div className="ml-auto flex items-center gap-3 flex-wrap">
+            {Object.entries(EVENT_TYPES).map(([k, v]) => (
+              <span key={k} className="flex items-center gap-1 text-xs text-[#475569]">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ background: v.dot }} />
+                {v.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Month VIEW */}
+      {tab === "month" && (
+        <MonthView
+          monthDate={monthDate}
+          events={monthEvents}
+          teams={teams}
+          onEdit={openEditEvent}
+          onDelete={handleDeleteEvent}
+        />
+      )}
 
       {/* Week navigation */}
       {(tab === "week" || tab === "list") && (

@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Plus, Trash2, Edit, Euro, ToggleLeft, ToggleRight } from "lucide-react";
+import { Plus, Trash2, Edit, Euro, ToggleLeft, ToggleRight, Download, Upload, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
@@ -39,6 +39,8 @@ export default function FeesManager() {
   const [open, setOpen] = useState(false);
   const [editFee, setEditFee] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [importMsg, setImportMsg] = useState(null);
+  const importRef = useRef(null);
 
   useEffect(() => { load(); }, []);
 
@@ -79,6 +81,30 @@ export default function FeesManager() {
   const activeFees = fees.filter(f => f.active);
   const inactiveFees = fees.filter(f => !f.active);
 
+  const handleExport = async () => {
+    try {
+      const res = await ax.get("/export/fees", { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement("a"); a.href = url; a.download = "tarifas.xlsx"; a.click();
+      window.URL.revokeObjectURL(url);
+    } catch { alert("Error al exportar tarifas."); }
+  };
+
+  const handleImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportMsg(null);
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const res = await ax.post("/fees/import", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      setImportMsg({ ok: true, msg: res.data.message });
+      load();
+    } catch (err) {
+      setImportMsg({ ok: false, msg: err.response?.data?.detail || "Error al importar" });
+    }
+    e.target.value = "";
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -86,10 +112,26 @@ export default function FeesManager() {
           <h2 className="font-heading font-bold text-[#00296B] text-xl">Tarifas</h2>
           <p className="text-sm text-[#475569]">{activeFees.length} tarifas activas</p>
         </div>
-        <Button onClick={openCreate} className="bg-[#2460FF] hover:bg-[#00296B] text-white">
-          <Plus size={16} className="mr-1" /> Nueva Tarifa
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={handleExport} className="text-green-700 border-green-300 hover:bg-green-50 text-sm">
+            <Download size={14} className="mr-1" />Exportar Excel
+          </Button>
+          <Button variant="outline" onClick={() => importRef.current?.click()} className="text-[#2460FF] border-[#2460FF] hover:bg-blue-50 text-sm">
+            <Upload size={14} className="mr-1" />Importar Excel
+          </Button>
+          <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
+          <Button onClick={openCreate} className="bg-[#2460FF] hover:bg-[#00296B] text-white">
+            <Plus size={16} className="mr-1" /> Nueva Tarifa
+          </Button>
+        </div>
       </div>
+      {importMsg && (
+        <div className={`flex items-center gap-2 p-3 rounded-xl text-sm mb-4 ${importMsg.ok ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+          {importMsg.ok ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
+          {importMsg.msg}
+          <button onClick={() => setImportMsg(null)} className="ml-auto text-[#94A3B8] hover:text-[#475569] text-xs">✕</button>
+        </div>
+      )}
 
       {fees.length === 0 ? (
         <div className="text-center py-16 text-[#475569]">

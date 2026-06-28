@@ -276,6 +276,32 @@ class StaffUpdate(BaseModel):
     notes: Optional[str] = None
     active: Optional[bool] = None
 
+class AccountingEntryCreate(BaseModel):
+    type: str  # "ingreso" or "gasto"
+    category: str
+    concept: str
+    amount: float
+    date: str  # YYYY-MM-DD
+    payment_method: Optional[str] = "bank_transfer"  # cash|bank_transfer|card|sepa
+    reference: Optional[str] = ""
+    notes: Optional[str] = ""
+    supplier_or_client: Optional[str] = ""
+    is_recurring: Optional[bool] = False
+    recurring_period: Optional[str] = ""  # monthly|quarterly|annual
+
+class AccountingEntryUpdate(BaseModel):
+    type: Optional[str] = None
+    category: Optional[str] = None
+    concept: Optional[str] = None
+    amount: Optional[float] = None
+    date: Optional[str] = None
+    payment_method: Optional[str] = None
+    reference: Optional[str] = None
+    notes: Optional[str] = None
+    supplier_or_client: Optional[str] = None
+    is_recurring: Optional[bool] = None
+    recurring_period: Optional[str] = None
+
 class TrainingScheduleCreate(BaseModel):
     team_id: str
     day_of_week: str
@@ -953,6 +979,195 @@ async def delete_staff(staff_id: str, request: Request):
     club_id = await get_club_id_from_request(request)
     await db.staff.delete_one({"id": staff_id, "club_id": club_id})
     return {"message": "Empleado eliminado"}
+
+
+# ─── ACCOUNTING ENDPOINTS ──────────────────────────────────────────────────────
+
+@api_router.get("/accounting")
+async def get_accounting(
+    request: Request,
+    type: Optional[str] = None,
+    category: Optional[str] = None,
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+):
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
+    if type:
+        query["type"] = type
+    if category:
+        query["category"] = category
+    if year:
+        query["year"] = year
+    if month:
+        query["month"] = month
+    entries = await db.accounting.find(query, {"_id": 0}).sort("date", -1).to_list(5000)
+    return entries
+
+
+@api_router.post("/accounting")
+async def create_accounting_entry(data: AccountingEntryCreate, request: Request):
+    club_id = await get_club_id_from_request(request)
+    # Parse year/month from date
+    try:
+        dt = datetime.strptime(data.date, "%Y-%m-%d")
+        year = dt.year
+        month = dt.month
+    except Exception:
+        year = datetime.now().year
+        month = datetime.now().month
+    doc = {
+        "id": str(uuid.uuid4()),
+        "club_id": club_id,
+        "type": data.type,
+        "category": data.category,
+        "concept": data.concept,
+        "amount": data.amount,
+        "date": data.date,
+        "year": year,
+        "month": month,
+        "payment_method": data.payment_method or "bank_transfer",
+        "reference": data.reference or "",
+        "notes": data.notes or "",
+        "supplier_or_client": data.supplier_or_client or "",
+        "is_recurring": data.is_recurring or False,
+        "recurring_period": data.recurring_period or "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.accounting.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/accounting/{entry_id}")
+async def update_accounting_entry(entry_id: str, data: AccountingEntryUpdate, request: Request):
+    club_id = await get_club_id_from_request(request)
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    # If date changed, recalculate year/month
+    if "date" in update_data:
+        try:
+            dt = datetime.strptime(update_data["date"], "%Y-%m-%d")
+            update_data["year"] = dt.year
+            update_data["month"] = dt.month
+        except Exception:
+            pass
+    if update_data:
+        await db.accounting.update_one({"id": entry_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.accounting.find_one({"id": entry_id, "club_id": club_id}, {"_id": 0})
+    return updated
+
+
+@api_router.delete("/accounting/{entry_id}")
+async def delete_accounting_entry(entry_id: str, request: Request):
+    club_id = await get_club_id_from_request(request)
+    await db.accounting.delete_one({"id": entry_id, "club_id": club_id})
+    return {"message": "Apunte eliminado"}
+
+
+@api_router.get("/accounting/summary")
+async def get_accounting_summary(request: Request):
+    club_id = await get_club_id_from_request(request)
+    current_year = datetime.now().year
+    entries = await db.accounting.find({"club_id": club_id, "year": current_year}, {"_id": 0}).to_list(10000)
+
+    # Monthly summary
+    monthly: dict = {}
+    for m in range(1, 13):
+        monthly[m] = {"month": m, "ingresos": 0.0, "gastos": 0.0, "balance": 0.0}
+
+    # Category breakdown
+    cat_ingresos: dict = {}
+    cat_gastos: dict = {}
+    total_ingresos = 0.0
+    total_gastos = 0.0
+
+    for e in entries:
+        m = e.get("month", 0)
+        amt = float(e.get("amount", 0))
+        cat = e.get("category", "otros")
+        if e.get("type") == "ingreso":
+            if 1 <= m <= 12:
+                monthly[m]["ingresos"] += amt
+            total_ingresos += amt
+            cat_ingresos[cat] = cat_ingresos.get(cat, 0.0) + amt
+        elif e.get("type") == "gasto":
+            if 1 <= m <= 12:
+                monthly[m]["gastos"] += amt
+            total_gastos += amt
+            cat_gastos[cat] = cat_gastos.get(cat, 0.0) + amt
+
+    for m in monthly.values():
+        m["balance"] = round(m["ingresos"] - m["gastos"], 2)
+        m["ingresos"] = round(m["ingresos"], 2)
+        m["gastos"] = round(m["gastos"], 2)
+
+    return {
+        "year": current_year,
+        "monthly": list(monthly.values()),
+        "total_ingresos": round(total_ingresos, 2),
+        "total_gastos": round(total_gastos, 2),
+        "balance": round(total_ingresos - total_gastos, 2),
+        "total_entries": len(entries),
+        "category_ingresos": cat_ingresos,
+        "category_gastos": cat_gastos,
+    }
+
+
+@api_router.get("/export/accounting")
+async def export_accounting(
+    request: Request,
+    year: Optional[int] = None,
+):
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
+    if year:
+        query["year"] = year
+    entries = await db.accounting.find(query, {"_id": 0}).sort("date", -1).to_list(50000)
+
+    TYPE_LABEL = {"ingreso": "Ingreso", "gasto": "Gasto"}
+    METHOD_LABEL = {"cash": "Efectivo", "bank_transfer": "Transferencia", "card": "Tarjeta", "sepa": "SEPA"}
+    CAT_LABEL = {
+        "cuotas": "Cuotas de socios/jugadores",
+        "inscripciones": "Inscripciones y matrículas",
+        "patrocinios": "Patrocinios y publicidad",
+        "subvenciones": "Subvenciones y ayudas",
+        "torneos": "Ingresos por torneos",
+        "merchandising": "Merchandising y venta",
+        "donaciones": "Donaciones",
+        "otros_ingreso": "Otros ingresos",
+        "personal": "Personal y nóminas",
+        "instalaciones": "Instalaciones y alquiler",
+        "equipamiento": "Equipamiento deportivo",
+        "viajes": "Desplazamientos y viajes",
+        "arbitrajes": "Arbitrajes y tasas federativas",
+        "seguros": "Seguros",
+        "comunicacion": "Comunicación y marketing",
+        "suministros": "Suministros y oficina",
+        "mantenimiento": "Mantenimiento",
+        "otros_gasto": "Otros gastos",
+    }
+
+    headers = ["Fecha", "Tipo", "Categoría", "Concepto", "Proveedor/Cliente", "Método pago", "Referencia", "Importe (€)", "Notas"]
+    rows = [[
+        e.get("date", ""),
+        TYPE_LABEL.get(e.get("type", ""), e.get("type", "")),
+        CAT_LABEL.get(e.get("category", ""), e.get("category", "")),
+        e.get("concept", ""),
+        e.get("supplier_or_client", ""),
+        METHOD_LABEL.get(e.get("payment_method", ""), e.get("payment_method", "")),
+        e.get("reference", ""),
+        e.get("amount", 0),
+        e.get("notes", ""),
+    ] for e in entries]
+
+    export_year = year or datetime.now().year
+    buf = _make_excel("Contabilidad", headers, rows)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=contabilidad_{export_year}.xlsx"},
+    )
+
 
 @api_router.post("/staff/{staff_id}/upload-doc")
 async def upload_staff_doc(staff_id: str, doc_type: str, request: Request, file: UploadFile = File(...)):
@@ -3374,6 +3589,73 @@ async def export_staff(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=personal.xlsx"},
     )
+
+
+
+@api_router.get("/export/fees")
+async def export_fees(request: Request):
+    club_id = await get_club_id_from_request(request)
+    fees = await db.fees.find({"club_id": club_id}, {"_id": 0}).sort("name", 1).to_list(500)
+    teams = {t["id"]: t["name"] for t in await db.teams.find({"club_id": club_id}, {"_id": 0}).to_list(200)}
+    headers = ["Nombre", "Descripción", "Importe (€)", "Tipo", "Equipo", "Activa"]
+    rows = [[
+        f.get("name", ""), f.get("description", ""),
+        f.get("amount", 0), f.get("fee_type", ""), teams.get(f.get("team_id", ""), ""),
+        "Sí" if f.get("active", True) else "No",
+    ] for f in fees]
+    buf = _make_excel("Tarifas", headers, rows)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": "attachment; filename=tarifas.xlsx"})
+
+
+@api_router.post("/fees/import")
+async def import_fees(request: Request, file: UploadFile = File(...)):
+    club_id = await get_club_id_from_request(request)
+    content = await file.read()
+    try:
+        import openpyxl, io as _io
+        wb = openpyxl.load_workbook(_io.BytesIO(content))
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        header = next(rows_iter, None)
+        if header is None:
+            raise HTTPException(status_code=400, detail="Archivo vacío")
+        # Normalize header: Nombre, Importe, Descripcion, Tipo, Activa
+        h = [str(c or "").strip().lower() for c in header]
+        def col(name_variants):
+            for v in name_variants:
+                if v in h: return h.index(v)
+            return None
+        i_nombre = col(["nombre", "name"])
+        i_importe = col(["importe", "importe (€)", "amount", "precio"])
+        i_desc = col(["descripción", "descripcion", "description"])
+        i_tipo = col(["tipo", "fee_type", "type"])
+        i_activa = col(["activa", "active"])
+        if i_nombre is None or i_importe is None:
+            raise HTTPException(status_code=400, detail="El archivo debe tener columnas 'Nombre' e 'Importe'")
+        created = 0
+        for row in rows_iter:
+            nombre = str(row[i_nombre] or "").strip()
+            if not nombre:
+                continue
+            try:
+                importe = float(row[i_importe] or 0)
+            except (TypeError, ValueError):
+                importe = 0
+            desc = str(row[i_desc] or "").strip() if i_desc is not None else ""
+            tipo = str(row[i_tipo] or "inscripcion").strip() if i_tipo is not None else "inscripcion"
+            activa_raw = str(row[i_activa] or "sí").strip().lower() if i_activa is not None else "sí"
+            activa = activa_raw not in ("no", "false", "0", "inactiva")
+            doc = {"id": str(uuid.uuid4()), "club_id": club_id, "name": nombre,
+                   "description": desc, "amount": importe, "fee_type": tipo,
+                   "active": activa, "team_id": "", "member_type": ""}
+            await db.fees.insert_one(doc)
+            created += 1
+        return {"created": created, "message": f"{created} tarifas importadas correctamente"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al procesar el archivo: {str(e)}")
 
 
 # ─── COMMUNICATIONS LISTS ─────────────────────────────────────────────────────

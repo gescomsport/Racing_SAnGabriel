@@ -35,6 +35,7 @@ import CalendarManager from "../components/admin/CalendarManager";
 import GdprManager from "../components/admin/GdprManager";
 import PatrocinadoresManager from "../components/admin/PatrocinadoresManager";
 import StaffManager from "../components/admin/StaffManager";
+import ContabilidadManager from "../components/admin/ContabilidadManager";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const ax = axios.create({ baseURL: API, withCredentials: true });
@@ -57,6 +58,7 @@ const sidebarItems = [
   { id: "patrocinadores", label: "Patrocinadores", icon: Star, highlight: true },
   { id: "contacts", label: "Mensajes", icon: Mail },
   { id: "sepa", label: "SEPA / Domicil.", icon: Landmark },
+  { id: "contabilidad", label: "Contabilidad", icon: TrendingUp, highlight: true },
   { id: "reports", label: "Informes", icon: BarChart3 },
   { id: "usuarios", label: "Usuarios / Acceso", icon: KeyRound, highlight: true },
   { id: "social", label: "Redes Sociales", icon: Rss },
@@ -163,6 +165,7 @@ export default function AdminPage() {
         {section === "patrocinadores" && <PatrocinadoresManager />}
         {section === "contacts" && <ContactsManager onRefresh={loadData} />}
         {section === "sepa" && <SepaManager />}
+        {section === "contabilidad" && <ContabilidadManager />}
         {section === "reports" && <ReportsManager />}
         {section === "usuarios" && <UsuariosManager />}
         {section === "social" && <SocialMediaManager />}
