@@ -457,7 +457,12 @@ function NewsManager({ news, onRefresh }) {
   );
 }
 
-const BLANK_TEAM = { name: "", category: "", coach: "", coach_ids: [], image_url: "", description: "", facility_id: "" };
+const BLANK_TEAM = { name: "", category: "", coach: "", coach_ids: [], image_url: "", description: "", facility_id: "", color: "#2460FF" };
+
+const TEAM_COLORS = [
+  "#2460FF","#00296B","#16a34a","#9333ea","#e11d48","#d97706",
+  "#0891b2","#dc2626","#7c3aed","#059669","#ea580c","#64748b",
+];
 
 function TeamForm({ form, setForm, coaches, facilities, onSave, saveLabel }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -497,6 +502,19 @@ function TeamForm({ form, setForm, coaches, facilities, onSave, saveLabel }) {
         </div>
         <p className="text-xs text-[#94A3B8] mt-1">O escribe nombre manualmente:</p>
         <Input value={form.coach} onChange={e => set("coach", e.target.value)} className="mt-1 text-sm" placeholder="Nombre entrenador adicional..." />
+      </div>
+      <div>
+        <Label className="text-sm">Color del equipo (en el calendario)</Label>
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
+          {TEAM_COLORS.map(c => (
+            <button key={c} onClick={() => set("color", c)} title={c}
+              className={`w-7 h-7 rounded-full border-2 transition-all ${form.color === c ? "border-white ring-2 ring-offset-1 ring-gray-400 scale-110" : "border-white hover:scale-105"}`}
+              style={{ background: c }} />
+          ))}
+          <input type="color" value={form.color || "#2460FF"} onChange={e => set("color", e.target.value)}
+            className="w-7 h-7 rounded-full border border-[#E2E8F0] cursor-pointer" title="Color personalizado" />
+          <span className="text-xs text-[#94A3B8] font-mono">{form.color || "#2460FF"}</span>
+        </div>
       </div>
       <div><Label className="text-sm">URL Imagen del equipo</Label><Input value={form.image_url} onChange={e => set("image_url", e.target.value)} className="mt-1" placeholder="https://..." /></div>
       <div><Label className="text-sm">Descripción</Label><Textarea value={form.description} onChange={e => set("description", e.target.value)} rows={2} className="mt-1" /></div>
@@ -589,8 +607,12 @@ function TeamsManager({ teams, onRefresh }) {
       <div className="space-y-3">
         {teams.map(team => (
           <div key={team.id} className="bg-white rounded-xl border border-[#E2E8F0] p-4 flex items-center gap-4" data-testid={`team-item-${team.id}`}>
-            {team.image_url && (
+            {team.image_url ? (
               <img src={team.image_url} alt={team.name} className="w-12 h-12 object-cover rounded-lg flex-shrink-0" onError={e => { e.target.style.display = "none"; }} />
+            ) : (
+              <div className="w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ background: (team.color || "#2460FF") + "25" }}>
+                <div className="w-5 h-5 rounded-full" style={{ background: team.color || "#2460FF" }} />
+              </div>
             )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">

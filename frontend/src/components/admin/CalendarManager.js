@@ -262,6 +262,7 @@ function TemplateFormBody({ name, setName, rows, addRow, removeRow, setRow, team
 // ── Month View ────────────────────────────────────────────────────────────────
 function MonthView({ monthDate, events, teams, onEdit, onDelete }) {
   const teamMap = Object.fromEntries(teams.map(t => [t.id, t.name]));
+  const teamColorMap = Object.fromEntries(teams.map(t => [t.id, t.color || "#2460FF"]));
 
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
@@ -311,11 +312,12 @@ function MonthView({ monthDate, events, teams, onEdit, onDelete }) {
               {/* Events */}
               {dayEvts.slice(0, 3).map(ev => {
                 const et = EVENT_TYPES[ev.type] || EVENT_TYPES.evento;
+                const dotColor = ev.team_id && teamColorMap[ev.team_id] ? teamColorMap[ev.team_id] : et.dot;
                 return (
                   <button key={ev.id}
                     onClick={() => onEdit(ev)}
                     className="w-full text-left rounded px-1.5 py-0.5 text-xs font-medium truncate leading-tight transition-opacity hover:opacity-80"
-                    style={{ background: et.dot + "20", color: et.dot, borderLeft: `2px solid ${et.dot}` }}>
+                    style={{ background: dotColor + "20", color: dotColor, borderLeft: `2px solid ${dotColor}` }}>
                     {ev.time ? `${ev.time.slice(0, 5)} ` : ""}{ev.title || et.label}
                   </button>
                 );
@@ -334,6 +336,7 @@ function MonthView({ monthDate, events, teams, onEdit, onDelete }) {
 // ── Week View ─────────────────────────────────────────────────────────────────
 function WeekView({ weekStart, events, teams, facilities, onDelete, onEdit }) {
   const teamMap = Object.fromEntries(teams.map(t => [t.id, t.name]));
+  const teamColorMap = Object.fromEntries(teams.map(t => [t.id, t.color || "#2460FF"]));
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const eventsForDay = (d) => {
@@ -361,9 +364,10 @@ function WeekView({ weekStart, events, teams, facilities, onDelete, onEdit }) {
             <div key={i} className="border-r border-[#F1F5F9] last:border-0 p-1.5 space-y-1 min-h-32">
               {dayEvts.map(ev => {
                 const et = EVENT_TYPES[ev.type] || EVENT_TYPES.evento;
+                const dotColor = ev.team_id && teamColorMap[ev.team_id] ? teamColorMap[ev.team_id] : et.dot;
                 return (
-                  <div key={ev.id} className="group relative rounded-lg px-2 py-1.5 cursor-pointer" style={{ background: et.dot + "18", borderLeft: `3px solid ${et.dot}` }} onClick={() => onEdit(ev)}>
-                    <p className="text-xs font-bold leading-tight truncate" style={{ color: et.dot }}>{ev.title || et.label}</p>
+                  <div key={ev.id} className="group relative rounded-lg px-2 py-1.5 cursor-pointer" style={{ background: dotColor + "18", borderLeft: `3px solid ${dotColor}` }} onClick={() => onEdit(ev)}>
+                    <p className="text-xs font-bold leading-tight truncate" style={{ color: dotColor }}>{ev.title || et.label}</p>
                     {ev.time && <p className="text-xs text-[#94A3B8] flex items-center gap-0.5"><Clock size={9} />{ev.time}</p>}
                     {ev.team_id && <p className="text-xs text-[#94A3B8] truncate">{teamMap[ev.team_id] || ""}</p>}
                     <button onClick={e => { e.stopPropagation(); onDelete(ev.id); }} className="absolute top-0.5 right-0.5 text-[#CBD5E1] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
