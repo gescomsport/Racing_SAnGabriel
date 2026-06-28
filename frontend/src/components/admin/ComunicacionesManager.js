@@ -23,13 +23,31 @@ const FILTER_TYPE_LABELS = {
 // ──────────────────────────────────────────────────────────
 // COMPOSE TAB
 // ──────────────────────────────────────────────────────────
-function ComposeTab({ lists }) {
+function ComposeTab({ lists, people }) {
   const [form, setForm] = useState({ subject: "", body_html: "", list_id: "", recipient_emails: "" });
   const [attachments, setAttachments] = useState([]);
   const [status, setStatus] = useState(null);
   const [sending, setSending] = useState(false);
   const [preview, setPreview] = useState(null);
   const fileInputRef = useState(null);
+  const [personSearch, setPersonSearch] = useState("");
+  const [selectedPeople, setSelectedPeople] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const suggestions = personSearch.length > 1
+    ? (people || []).filter(p =>
+        !selectedPeople.find(s => s.id === p.id) &&
+        (`${p.name} ${p.email}`.toLowerCase().includes(personSearch.toLowerCase()))
+      ).slice(0, 8)
+    : [];
+
+  const addPerson = (p) => {
+    setSelectedPeople(prev => [...prev, p]);
+    setPersonSearch("");
+    setShowSuggestions(false);
+  };
+
+  const removePerson = (id) => setSelectedPeople(prev => prev.filter(p => p.id !== id));
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -54,23 +72,26 @@ function ComposeTab({ lists }) {
       setStatus({ type: "error", msg: "Asunto y cuerpo son obligatorios." });
       return;
     }
-    if (!form.list_id && !form.recipient_emails.trim()) {
-      setStatus({ type: "error", msg: "Selecciona una lista o escribe destinatarios." });
+    if (!form.list_id && !form.recipient_emails.trim() && selectedPeople.length === 0) {
+      setStatus({ type: "error", msg: "Selecciona una lista, busca un destinatario o escribe emails." });
       return;
     }
     setSending(true);
     setStatus(null);
     try {
+      const manualEmails = form.recipient_emails
+        ? form.recipient_emails.split(/[\n,;]+/).map(e => e.trim()).filter(Boolean)
+        : [];
+      const peopleEmails = selectedPeople.map(p => p.email);
+      const allEmails = [...new Set([...peopleEmails, ...manualEmails])];
+
       let r;
       if (attachments.length > 0) {
         const fd = new FormData();
         fd.append("subject", form.subject);
         fd.append("body_html", form.body_html);
         fd.append("list_id", form.list_id || "");
-        const emails = form.recipient_emails
-          ? form.recipient_emails.split(/[\n,;]+/).map(e => e.trim()).filter(Boolean)
-          : [];
-        emails.forEach(e => fd.append("recipient_emails", e));
+        allEmails.forEach(e => fd.append("recipient_emails", e));
         attachments.forEach(f => fd.append("attachments", f, f.name));
         r = await ax.post("/communications/send-with-attachments", fd, {
           headers: { "Content-Type": "multipart/form-data" },
@@ -80,14 +101,13 @@ function ComposeTab({ lists }) {
           subject: form.subject,
           body_html: form.body_html,
           list_id: form.list_id || "",
-          recipient_emails: form.recipient_emails
-            ? form.recipient_emails.split(/[\n,;]+/).map(e => e.trim()).filter(Boolean)
-            : [],
+          recipient_emails: allEmails,
         };
         r = await ax.post("/communications/send", payload);
       }
       setStatus({ type: "ok", msg: `Enviado a ${r.data.sent} de ${r.data.total} destinatarios.${r.data.errors?.length ? ` (${r.data.errors.length} errores)` : ""}` });
       setForm({ subject: "", body_html: "", list_id: "", recipient_emails: "" });
+      setSelectedPeople([]);
       setAttachments([]);
       setPreview(null);
     } catch (e) {
@@ -123,6 +143,54 @@ function ComposeTab({ lists }) {
             <div className="mt-2 p-3 bg-blue-50 rounded-lg text-xs text-blue-800">
               <strong>{preview.count} destinatarios</strong> con email válido.
               {preview.emails.length > 0 && <span> Ej: {preview.emails.slice(0, 3).join(", ")}{preview.count > 3 ? "..." : ""}</span>}
+            </div>
+          )}
+        </div>
+
+        {/* Búsqueda individual de personas */}
+        <div className="mb-4">
+          <Label className="text-sm mb-1 block">Buscar destinatario individual</Label>
+          <div className="relative">
+            <div className="flex items-center gap-2 border border-[#E2E8F0] rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-[#2460FF] focus-within:border-transparent bg-white">
+              <Search size={14} className="text-[#94A3B8] flex-shrink-0" />
+              <input
+                value={personSearch}
+                onChange={e => { setPersonSearch(e.target.value); setShowSuggestions(true); }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                placeholder="Buscar por nombre o email..."
+                className="flex-1 text-sm outline-none bg-transparent"
+              />
+            </div>
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute z-50 top-full mt-1 w-full bg-white border border-[#E2E8F0] rounded-xl shadow-lg overflow-hidden">
+                {suggestions.map(p => (
+                  <button key={p.id} onMouseDown={() => addPerson(p)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F4F7FB] text-left transition-colors">
+                    <div className="w-7 h-7 rounded-full bg-[#EEF2FF] flex items-center justify-center text-xs font-bold text-[#2460FF] flex-shrink-0">
+                      {p.name[0]?.toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[#0F172A] truncate">{p.name}</p>
+                      <p className="text-xs text-[#94A3B8] truncate">{p.email}</p>
+                    </div>
+                    <span className="text-xs bg-[#F4F7FB] text-[#475569] px-2 py-0.5 rounded-full flex-shrink-0">{p.type}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {selectedPeople.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {selectedPeople.map(p => (
+                <span key={p.id} className="flex items-center gap-1.5 bg-[#EEF2FF] text-[#2460FF] text-xs px-2.5 py-1 rounded-full font-medium">
+                  {p.name}
+                  <button onClick={() => removePerson(p.id)} className="text-[#2460FF] hover:text-red-500 ml-0.5">
+                    <X size={10} />
+                  </button>
+                </span>
+              ))}
+              <span className="text-xs text-[#94A3B8] self-center ml-1">{selectedPeople.length} persona{selectedPeople.length !== 1 ? "s" : ""} seleccionada{selectedPeople.length !== 1 ? "s" : ""}</span>
             </div>
           )}
         </div>
@@ -392,11 +460,21 @@ export default function ComunicacionesManager() {
   const [tab, setTab] = useState("compose");
   const [lists, setLists] = useState([]);
   const [teams, setTeams] = useState([]);
+  const [people, setPeople] = useState([]);
 
   const loadLists = useCallback(async () => {
-    const [lr, tr] = await Promise.all([ax.get("/communications/lists"), ax.get("/teams")]);
+    const [lr, tr, pr, gr, mr] = await Promise.all([
+      ax.get("/communications/lists"), ax.get("/teams"),
+      ax.get("/players"), ax.get("/guardians"), ax.get("/members"),
+    ]);
     setLists(lr.data);
     setTeams(tr.data);
+    const all = [
+      ...pr.data.map(p => ({ id: `p_${p.id}`, name: `${p.name} ${p.surname || ""}`.trim(), email: p.email || "", type: "Deportista" })),
+      ...gr.data.map(p => ({ id: `g_${p.id}`, name: `${p.name} ${p.surname || ""}`.trim(), email: p.email || "", type: "Tutor" })),
+      ...mr.data.map(p => ({ id: `m_${p.id}`, name: `${p.name} ${p.surname || ""}`.trim(), email: p.email || "", type: "Socio" })),
+    ].filter(p => p.email.includes("@"));
+    setPeople(all);
   }, []);
 
   useEffect(() => { loadLists(); }, [loadLists]);
@@ -418,7 +496,7 @@ export default function ComunicacionesManager() {
           </button>
         ))}
       </div>
-      {tab === "compose" && <ComposeTab lists={lists} />}
+      {tab === "compose" && <ComposeTab lists={lists} people={people} />}
       {tab === "lists" && <ListsTab lists={lists} teams={teams} onRefresh={loadLists} />}
       {tab === "history" && <HistoryTab />}
     </div>

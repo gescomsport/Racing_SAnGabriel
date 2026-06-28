@@ -12,10 +12,16 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const ax = axios.create({ baseURL: API, withCredentials: true });
 
 const ROLES = {
-  admin: { label: "Administrador", color: "bg-red-50 text-red-700 border-red-200", desc: "Acceso total, gestión de usuarios" },
-  director: { label: "Director", color: "bg-purple-50 text-purple-700 border-purple-200", desc: "Acceso total excepto usuarios" },
-  secretaria: { label: "Secretaría", color: "bg-blue-50 text-blue-700 border-blue-200", desc: "Deportistas, socios, pagos, comunicaciones" },
-  entrenador: { label: "Entrenador", color: "bg-green-50 text-green-700 border-green-200", desc: "Solo su equipo: jugadores, horarios, partidos" },
+  admin:         { label: "Administrador/a",  color: "bg-red-50 text-red-700 border-red-200",       desc: "Acceso total, gestión de usuarios" },
+  presidente:    { label: "Presidente/a",     color: "bg-violet-50 text-violet-700 border-violet-200", desc: "Acceso total excepto configuración técnica" },
+  vicepresidente:{ label: "Vicepresidente/a", color: "bg-purple-50 text-purple-700 border-purple-200", desc: "Igual que presidente" },
+  director:      { label: "Director/a",       color: "bg-indigo-50 text-indigo-700 border-indigo-200", desc: "Acceso total excepto usuarios" },
+  secretario:    { label: "Secretario/a",     color: "bg-blue-50 text-blue-700 border-blue-200",    desc: "Deportistas, socios, pagos, comunicaciones" },
+  tesorero:      { label: "Tesorero/a",       color: "bg-amber-50 text-amber-700 border-amber-200", desc: "Ventas, cobros, SEPA, informes financieros" },
+  vocal:         { label: "Vocal",            color: "bg-slate-50 text-slate-600 border-slate-200", desc: "Acceso de solo lectura a deportistas y resultados" },
+  delegado:      { label: "Delegado/a",       color: "bg-teal-50 text-teal-700 border-teal-200",    desc: "Gestión de un equipo concreto" },
+  entrenador:    { label: "Entrenador/a",     color: "bg-green-50 text-green-700 border-green-200", desc: "Solo su equipo: jugadores, horarios, partidos" },
+  auxiliar:      { label: "Auxiliar técnico/a",color: "bg-lime-50 text-lime-700 border-lime-200",   desc: "Acceso a calendarios y convocatorias" },
 };
 
 export default function UsuariosManager() {
@@ -24,7 +30,7 @@ export default function UsuariosManager() {
   const [editOpen, setEditOpen] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [showPw, setShowPw] = useState(false);
-  const [form, setForm] = useState({ email: "", name: "", password: "", role: "secretaria" });
+  const [form, setForm] = useState({ email: "", name: "", password: "", role: "secretario" });
   const [editForm, setEditForm] = useState({ name: "", role: "", password: "" });
   const [saved, setSaved] = useState(false);
 
@@ -40,7 +46,7 @@ export default function UsuariosManager() {
   const handleCreate = async () => {
     await ax.post("/admin/users", form);
     setOpen(false);
-    setForm({ email: "", name: "", password: "", role: "secretaria" });
+    setForm({ email: "", name: "", password: "", role: "secretario" });
     load();
   };
 

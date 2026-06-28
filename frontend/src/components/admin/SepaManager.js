@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
-import { Plus, Trash2, Download, FileText, CheckCircle2, AlertTriangle, Info } from "lucide-react";
+import { Plus, Trash2, Download, FileText, CheckCircle2, AlertTriangle, Info, Zap, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -63,6 +63,14 @@ export default function SepaManager() {
   const setF  = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const setXF = (k, v) => setXmlForm(f => ({ ...f, [k]: v }));
 
+  // ── Desde ventas ──
+  const [salesOpen, setSalesOpen]         = useState(false);
+  const [salesData, setSalesData]         = useState([]);
+  const [salesLoading, setSalesLoading]   = useState(false);
+  const [selSales, setSelSales]           = useState([]);
+  const [bulkResult, setBulkResult]       = useState(null);
+  const [bulkCreating, setBulkCreating]   = useState(false);
+
   useEffect(() => { loadAll(); }, []);
 
   const loadAll = async () => {
@@ -70,6 +78,82 @@ export default function SepaManager() {
       const [m, p, mb] = await Promise.all([ax.get("/sepa/mandates"), ax.get("/players"), ax.get("/members")]);
       setMandates(m.data); setPlayers(p.data); setMembers(mb.data);
     } catch {}
+  };
+
+  const loadSalesData = async () => {
+    setSalesLoading(true);
+    setBulkResult(null);
+    setSelSales([]);
+    try {
+      const [salesRes, playersRes, membersRes, mandatesRes] = await Promise.all([
+        ax.get("/sales"), ax.get("/players"), ax.get("/members"), ax.get("/sepa/mandates"),
+      ]);
+      const activeMandatePersonIds = new Set(
+        mandatesRes.data.filter(m => m.status === "active").map(m => m.person_id)
+      );
+      const playerMap = Object.fromEntries(playersRes.data.map(p => [p.id, p]));
+      const memberMap = Object.fromEntries(membersRes.data.map(m => [m.id, m]));
+
+      const rows = salesRes.data
+        .filter(s => s.status === "pending")
+        .map(s => {
+          const person = s.person_type === "player" ? playerMap[s.person_id] : memberMap[s.person_id];
+          const iban = person?.bank_iban || "";
+          const hasMandateAlready = activeMandatePersonIds.has(s.person_id);
+          return {
+            sale_id: s.id,
+            person_id: s.person_id,
+            person_type: s.person_type,
+            person_name: person ? `${person.name} ${person.surname || ""}`.trim() : "Desconocido",
+            concept: s.concept,
+            amount: s.amount,
+            due_date: s.due_date,
+            iban,
+            has_mandate: hasMandateAlready,
+            can_create: !!iban && !hasMandateAlready,
+          };
+        })
+        .sort((a, b) => b.can_create - a.can_create);
+
+      setSalesData(rows);
+    } catch {
+      setSalesData([]);
+    }
+    setSalesLoading(false);
+  };
+
+  const handleOpenSales = () => {
+    setSalesOpen(true);
+    loadSalesData();
+  };
+
+  const handleBulkCreate = async () => {
+    const toCreate = salesData.filter(r => selSales.includes(r.sale_id) && r.can_create);
+    if (toCreate.length === 0) return;
+    setBulkCreating(true);
+    let ok = 0, errors = [];
+    for (const row of toCreate) {
+      try {
+        await ax.post("/sepa/mandates", {
+          person_id: row.person_id,
+          person_type: row.person_type,
+          person_name: row.person_name,
+          debtor_iban: row.iban,
+          debtor_bic: "",
+          mandate_ref: "",
+          signature_date: new Date().toISOString().slice(0, 10),
+          sequence_type: "FRST",
+          amount: row.amount || 0,
+          notes: `Desde venta: ${row.concept}`,
+        });
+        ok++;
+      } catch (e) {
+        errors.push(`${row.person_name}: ${e.response?.data?.detail || "error"}`);
+      }
+    }
+    setBulkResult({ ok, errors });
+    setBulkCreating(false);
+    if (ok > 0) { loadAll(); loadSalesData(); }
   };
 
   const handlePersonChange = (personId) => {
@@ -166,12 +250,15 @@ export default function SepaManager() {
           <h2 className="font-heading font-bold text-[#00296B] text-xl">SEPA — Domiciliaciones</h2>
           <p className="text-xs text-[#475569] mt-0.5">Mandatos pain.008.001.02 · Estándar EPC SEPA Core · Banco de España</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {selected.length > 0 && (
             <Button onClick={() => { setXmlOpen(true); setXmlError(""); }} className="bg-green-600 hover:bg-green-700 text-white">
               <Download size={14} className="mr-1.5" /> Generar XML ({selected.length})
             </Button>
           )}
+          <Button variant="outline" className="text-[#2460FF] border-[#2460FF] text-sm" onClick={handleOpenSales}>
+            <Zap size={14} className="mr-1.5" />Desde ventas
+          </Button>
           <Dialog open={newOpen} onOpenChange={setNewOpen}>
             <DialogTrigger asChild>
               <Button className="bg-[#2460FF] hover:bg-[#00296B] text-white">
@@ -365,6 +452,105 @@ export default function SepaManager() {
           </div>
         </details>
       )}
+
+      {/* ── Diálogo: Desde ventas ─────────────────────────────────────── */}
+      <Dialog open={salesOpen} onOpenChange={v => { setSalesOpen(v); if (!v) setBulkResult(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-[#00296B] flex items-center gap-2">
+              <Zap size={16} className="text-[#2460FF]" />Generar mandatos desde ventas pendientes
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-[#475569] -mt-1">
+            Muestra ventas en estado <b>Pendiente</b>. Solo se pueden crear mandatos para personas que tienen IBAN registrado y no tienen ya un mandato activo.
+          </p>
+
+          {salesLoading && (
+            <div className="flex-1 flex items-center justify-center py-10 text-[#94A3B8] text-sm">Cargando ventas...</div>
+          )}
+
+          {!salesLoading && salesData.length === 0 && !bulkResult && (
+            <div className="flex-1 flex flex-col items-center justify-center py-10 text-[#94A3B8]">
+              <FileText size={36} className="opacity-40 mb-3" />
+              <p className="font-medium">No hay ventas pendientes</p>
+              <p className="text-sm mt-1">Crea ventas desde el módulo Ventas y Cobros.</p>
+            </div>
+          )}
+
+          {bulkResult && (
+            <div className={`rounded-xl p-4 ${bulkResult.errors.length === 0 ? "bg-green-50 border border-green-200" : "bg-amber-50 border border-amber-200"}`}>
+              <p className={`font-bold text-sm ${bulkResult.errors.length === 0 ? "text-green-700" : "text-amber-700"}`}>
+                {bulkResult.ok} mandato{bulkResult.ok !== 1 ? "s" : ""} creado{bulkResult.ok !== 1 ? "s" : ""} correctamente.
+              </p>
+              {bulkResult.errors.length > 0 && (
+                <div className="mt-2 space-y-0.5">
+                  {bulkResult.errors.map((e, i) => <p key={i} className="text-xs text-red-600">{e}</p>)}
+                </div>
+              )}
+              <Button size="sm" className="mt-3 bg-[#2460FF] hover:bg-[#00296B] text-white" onClick={() => { setBulkResult(null); loadSalesData(); }}>
+                Ver ventas restantes
+              </Button>
+            </div>
+          )}
+
+          {!salesLoading && salesData.length > 0 && !bulkResult && (
+            <>
+              <div className="flex items-center gap-3 py-2">
+                <span className="text-xs text-[#475569]">{salesData.filter(r => r.can_create).length} listas para mandato · {salesData.filter(r => !r.can_create).length} bloqueadas</span>
+                <button className="text-xs text-[#2460FF] hover:underline ml-auto font-medium"
+                  onClick={() => setSelSales(salesData.filter(r => r.can_create).map(r => r.sale_id))}>
+                  Seleccionar aptas
+                </button>
+                {selSales.length > 0 && (
+                  <button className="text-xs text-[#475569] hover:underline" onClick={() => setSelSales([])}>Limpiar</button>
+                )}
+              </div>
+
+              <div className="overflow-y-auto flex-1 space-y-1.5 pr-1">
+                {salesData.map(row => {
+                  const isSel = selSales.includes(row.sale_id);
+                  return (
+                    <div key={row.sale_id}
+                      onClick={() => row.can_create && setSelSales(s => s.includes(row.sale_id) ? s.filter(x => x !== row.sale_id) : [...s, row.sale_id])}
+                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
+                        !row.can_create ? "opacity-50 cursor-not-allowed bg-[#F8FAFC] border-[#E2E8F0]" :
+                        isSel ? "border-[#2460FF] ring-1 ring-[#2460FF] bg-[#F0F4FF] cursor-pointer" :
+                        "border-[#E2E8F0] hover:border-[#CBD5E1] bg-white cursor-pointer"
+                      }`}>
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${isSel ? "bg-[#2460FF] border-[#2460FF]" : "border-gray-300"}`}>
+                        {isSel && <CheckCircle2 size={12} className="text-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-[#0F172A]">{row.person_name}
+                          <span className="ml-2 text-xs font-normal text-[#94A3B8]">{row.person_type === "player" ? "Deportista" : "Socio"}</span>
+                        </p>
+                        <p className="text-xs text-[#475569]">{row.concept} · {row.amount?.toFixed?.(2) ?? "—"} €
+                          {row.due_date ? ` · Vence: ${row.due_date}` : ""}
+                        </p>
+                        {row.iban && <p className="text-xs text-[#94A3B8] font-mono">{row.iban.slice(0, 4)} •••• •••• {row.iban.slice(-4)}</p>}
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        {row.has_mandate && <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full font-medium">Ya tiene mandato</span>}
+                        {!row.iban && !row.has_mandate && <span className="text-xs bg-red-50 text-red-500 px-2 py-0.5 rounded-full font-medium">Sin IBAN</span>}
+                        {row.can_create && <span className="text-xs bg-blue-50 text-[#2460FF] px-2 py-0.5 rounded-full font-medium">Apto</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="border-t border-[#E2E8F0] pt-3 mt-2 flex items-center gap-3">
+                <span className="text-sm font-medium text-[#475569]">{selSales.length} seleccionado{selSales.length !== 1 ? "s" : ""}</span>
+                <Button onClick={handleBulkCreate} disabled={selSales.length === 0 || bulkCreating}
+                  className="ml-auto bg-[#2460FF] hover:bg-[#00296B] text-white">
+                  <Zap size={14} className="mr-1.5" />
+                  {bulkCreating ? "Creando mandatos..." : `Crear ${selSales.length} mandato${selSales.length !== 1 ? "s" : ""}`}
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Diálogo: Generar XML ───────────────────────────────────────── */}
       <Dialog open={xmlOpen} onOpenChange={setXmlOpen}>

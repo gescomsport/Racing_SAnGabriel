@@ -34,6 +34,7 @@ import FacilitiesManager from "../components/admin/FacilitiesManager";
 import CalendarManager from "../components/admin/CalendarManager";
 import GdprManager from "../components/admin/GdprManager";
 import PatrocinadoresManager from "../components/admin/PatrocinadoresManager";
+import StaffManager from "../components/admin/StaffManager";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const ax = axios.create({ baseURL: API, withCredentials: true });
@@ -41,6 +42,7 @@ const ax = axios.create({ baseURL: API, withCredentials: true });
 const sidebarItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "deportistas", label: "Deportistas", icon: UsersRound, highlight: true },
+  { id: "staff", label: "Personal del Club", icon: UserCheck, highlight: true },
   { id: "equipos", label: "Equipos", icon: Users, highlight: true },
   { id: "ventas", label: "Ventas y Cobros", icon: ShoppingCart, highlight: true },
   { id: "comunicaciones", label: "Comunicaciones", icon: MessageSquare, highlight: true },
@@ -146,6 +148,7 @@ export default function AdminPage() {
       <main className="flex-1 p-4 lg:p-8 overflow-auto" data-testid="admin-content">
         {section === "dashboard" && <DashboardSection news={news} teams={teams} matches={matches} contacts={contacts} playerCount={playerCount} memberCount={memberCount} />}
         {section === "deportistas" && <DeportistasManager />}
+        {section === "staff" && <StaffManager />}
         {section === "equipos" && <TeamsManager teams={teams} onRefresh={loadData} />}
         {section === "ventas" && <VentasManager />}
         {section === "comunicaciones" && <ComunicacionesManager />}
@@ -1289,7 +1292,15 @@ function SettingsManager({ settings, onRefresh }) {
   const [testEmailStatus, setTestEmailStatus] = useState("");
   const [tab, setTab] = useState("club");
 
-  useEffect(() => { setForm(settings); }, [settings]);
+  useEffect(() => {
+    const s = { ...settings };
+    if (!s.bank_accounts || s.bank_accounts.length === 0) {
+      s.bank_accounts = s.bank_iban
+        ? [{ id: "1", label: "Cuenta principal", iban: s.bank_iban || "", bic: s.bank_bic || "", bank_name: s.bank_name || "", holder: s.bank_holder || "" }]
+        : [];
+    }
+    setForm(s);
+  }, [settings]);
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
@@ -1388,13 +1399,54 @@ function SettingsManager({ settings, onRefresh }) {
       {tab === "bank" && (
         <SettingsSection title="Transferencia Bancaria" icon={Landmark}>
           <Toggle checked={!!form.bank_transfer_enabled} onChange={v => set("bank_transfer_enabled", v)} label="Permitir pago por transferencia bancaria" />
-          <div className="grid grid-cols-2 gap-4">
-            <div><Label className="text-sm">IBAN del club</Label><Input value={form.bank_iban || ""} onChange={e => set("bank_iban", e.target.value)} className="mt-1 font-mono" placeholder="ES76 2100 0813 6101 2345 6789" /></div>
-            <div><Label className="text-sm">BIC / SWIFT</Label><Input value={form.bank_bic || ""} onChange={e => set("bank_bic", e.target.value)} className="mt-1 font-mono" placeholder="CAIXESBBXXX" /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><Label className="text-sm">Nombre del banco</Label><Input value={form.bank_name || ""} onChange={e => set("bank_name", e.target.value)} className="mt-1" placeholder="CaixaBank" /></div>
-            <div><Label className="text-sm">Titular de la cuenta</Label><Input value={form.bank_holder || ""} onChange={e => set("bank_holder", e.target.value)} className="mt-1" /></div>
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <Label className="text-sm font-semibold text-[#00296B]">Cuentas bancarias ({(form.bank_accounts || []).length})</Label>
+              <Button size="sm" variant="outline" className="text-xs text-[#2460FF] border-[#2460FF]"
+                onClick={() => {
+                  const accounts = [...(form.bank_accounts || [])];
+                  accounts.push({ id: Date.now().toString(), label: "", iban: "", bic: "", bank_name: "", holder: "" });
+                  set("bank_accounts", accounts);
+                }}>
+                <Plus size={12} className="mr-1" />Añadir cuenta
+              </Button>
+            </div>
+            {(form.bank_accounts || []).length === 0 && (
+              <p className="text-sm text-[#94A3B8] py-6 text-center border-2 border-dashed border-[#E2E8F0] rounded-xl">
+                No hay cuentas. Haz clic en "Añadir cuenta".
+              </p>
+            )}
+            <div className="space-y-3">
+              {(form.bank_accounts || []).map((acct, idx) => {
+                const updateAcct = (field, val) => {
+                  const accounts = (form.bank_accounts || []).map((a, i) => i === idx ? { ...a, [field]: val } : a);
+                  set("bank_accounts", accounts);
+                };
+                const removeAcct = () => {
+                  const accounts = (form.bank_accounts || []).filter((_, i) => i !== idx);
+                  set("bank_accounts", accounts);
+                };
+                return (
+                  <div key={acct.id || idx} className="border border-[#E2E8F0] rounded-xl p-4 space-y-3 relative bg-[#FAFBFF]">
+                    <div className="flex items-center gap-2 pr-6">
+                      {idx === 0 && <span className="text-xs bg-[#2460FF] text-white px-2 py-0.5 rounded-full font-bold">Principal</span>}
+                      <Input value={acct.label} onChange={e => updateAcct("label", e.target.value)} className="text-sm flex-1" placeholder="Etiqueta (ej: Cuenta principal, Cuota SEPA...)" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><Label className="text-xs text-[#475569]">IBAN</Label><Input value={acct.iban} onChange={e => updateAcct("iban", e.target.value.toUpperCase())} className="mt-1 font-mono text-xs" placeholder="ES76 2100 0813..." /></div>
+                      <div><Label className="text-xs text-[#475569]">BIC / SWIFT</Label><Input value={acct.bic} onChange={e => updateAcct("bic", e.target.value.toUpperCase())} className="mt-1 font-mono text-xs" placeholder="CAIXESBBXXX" /></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><Label className="text-xs text-[#475569]">Nombre del banco</Label><Input value={acct.bank_name} onChange={e => updateAcct("bank_name", e.target.value)} className="mt-1 text-sm" placeholder="CaixaBank" /></div>
+                      <div><Label className="text-xs text-[#475569]">Titular</Label><Input value={acct.holder} onChange={e => updateAcct("holder", e.target.value)} className="mt-1 text-sm" /></div>
+                    </div>
+                    <button onClick={removeAcct} className="absolute top-3 right-3 text-red-400 hover:text-red-600 p-1">
+                      <X size={14} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
           <div><Label className="text-sm">Instrucciones adicionales (se muestran al socio/jugador)</Label><Textarea value={form.bank_transfer_instructions || ""} onChange={e => set("bank_transfer_instructions", e.target.value)} rows={3} className="mt-1" placeholder="Indica tu nombre y apellidos en el concepto de la transferencia." /></div>
         </SettingsSection>

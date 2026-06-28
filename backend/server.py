@@ -236,6 +236,46 @@ class MemberUpdate(BaseModel):
     season: Optional[str] = None
     notes: Optional[str] = None
 
+class StaffCreate(BaseModel):
+    name: str
+    surname: Optional[str] = ""
+    role: Optional[str] = "entrenador"  # entrenador|auxiliar|administrativo|directivo|medico|fisioterapeuta|delegado|otro
+    team_ids: Optional[List[str]] = []
+    dni: Optional[str] = ""
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    address: Optional[str] = ""
+    city: Optional[str] = ""
+    contract_type: Optional[str] = ""  # voluntario|laboral|autonomo
+    contract_start: Optional[str] = ""
+    contract_end: Optional[str] = ""
+    bank_iban: Optional[str] = ""
+    photo_url: Optional[str] = ""
+    dni_front_url: Optional[str] = ""
+    dni_back_url: Optional[str] = ""
+    notes: Optional[str] = ""
+    active: Optional[bool] = True
+
+class StaffUpdate(BaseModel):
+    name: Optional[str] = None
+    surname: Optional[str] = None
+    role: Optional[str] = None
+    team_ids: Optional[List[str]] = None
+    dni: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    contract_type: Optional[str] = None
+    contract_start: Optional[str] = None
+    contract_end: Optional[str] = None
+    bank_iban: Optional[str] = None
+    photo_url: Optional[str] = None
+    dni_front_url: Optional[str] = None
+    dni_back_url: Optional[str] = None
+    notes: Optional[str] = None
+    active: Optional[bool] = None
+
 class TrainingScheduleCreate(BaseModel):
     team_id: str
     day_of_week: str
@@ -874,6 +914,68 @@ async def delete_member(member_id: str, request: Request):
     club_id = await get_club_id_from_request(request)
     await db.members.delete_one({"id": member_id, "club_id": club_id})
     return {"message": "Socio eliminado"}
+
+# --- STAFF (PERSONAL DEL CLUB) ENDPOINTS ---
+@api_router.get("/staff")
+async def get_staff(request: Request, role: Optional[str] = None, active: Optional[bool] = None, team_id: Optional[str] = None):
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
+    if role:
+        query["role"] = role
+    if active is not None:
+        query["active"] = active
+    if team_id:
+        query["team_ids"] = team_id
+    staff = await db.staff.find(query, {"_id": 0}).sort("surname", 1).to_list(500)
+    return staff
+
+@api_router.post("/staff")
+async def create_staff(data: StaffCreate, request: Request):
+    club_id = await get_club_id_from_request(request)
+    doc = data.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.staff.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+@api_router.put("/staff/{staff_id}")
+async def update_staff(staff_id: str, data: StaffUpdate, request: Request):
+    club_id = await get_club_id_from_request(request)
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if update_data:
+        await db.staff.update_one({"id": staff_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.staff.find_one({"id": staff_id, "club_id": club_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/staff/{staff_id}")
+async def delete_staff(staff_id: str, request: Request):
+    club_id = await get_club_id_from_request(request)
+    await db.staff.delete_one({"id": staff_id, "club_id": club_id})
+    return {"message": "Empleado eliminado"}
+
+@api_router.post("/staff/{staff_id}/upload-doc")
+async def upload_staff_doc(staff_id: str, doc_type: str, request: Request, file: UploadFile = File(...)):
+    """Upload photo, dni_front or dni_back for a staff member. doc_type: photo|dni_front|dni_back"""
+    club_id = await get_club_id_from_request(request)
+    import os
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Archivo demasiado grande")
+    ext = (file.filename or "file.jpg").rsplit(".", 1)[-1].lower()
+    if ext not in ("jpg", "jpeg", "png", "webp", "pdf"):
+        raise HTTPException(status_code=400, detail="Formato no permitido")
+    upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"{uuid.uuid4()}.{ext}"
+    with open(os.path.join(upload_dir, filename), "wb") as f:
+        f.write(content)
+    url = f"/api/uploads/{filename}"
+    field = {"photo": "photo_url", "dni_front": "dni_front_url", "dni_back": "dni_back_url"}.get(doc_type)
+    if not field:
+        raise HTTPException(status_code=400, detail="doc_type inválido")
+    await db.staff.update_one({"id": staff_id, "club_id": club_id}, {"$set": {field: url}})
+    return {"url": url, "field": field}
 
 # --- TRAINING SCHEDULES ENDPOINTS ---
 @api_router.get("/training-schedules")
@@ -3219,6 +3321,58 @@ async def export_guardians(request: Request):
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=tutores.xlsx"},
+    )
+
+
+@api_router.get("/export/staff")
+async def export_staff(
+    request: Request,
+    role: Optional[str] = None,
+    active: Optional[bool] = None,
+):
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
+    if role:
+        query["role"] = role
+    if active is not None:
+        query["active"] = active
+    staff_list = await db.staff.find(query, {"_id": 0}).sort("surname", 1).to_list(5000)
+    teams = {t["id"]: t["name"] for t in await db.teams.find({"club_id": club_id}, {"_id": 0}).to_list(200)}
+    ROLE_LABELS = {
+        "entrenador": "Entrenador/a",
+        "auxiliar": "Auxiliar técnico",
+        "administrativo": "Administrativo/a",
+        "directivo": "Directivo/a",
+        "medico": "Médico/a",
+        "fisioterapeuta": "Fisioterapeuta",
+        "delegado": "Delegado/a",
+        "otro": "Otro",
+    }
+    CONTRACT_LABELS = {"voluntario": "Voluntario", "laboral": "Laboral", "autonomo": "Autónomo"}
+    headers = [
+        "Apellidos", "Nombre", "Rol", "Equipos",
+        "NIF/NIE", "Teléfono", "Email",
+        "Dirección", "Ciudad",
+        "Tipo contrato", "Inicio contrato", "Fin contrato",
+        "IBAN", "Estado", "Notas",
+    ]
+    rows = [[
+        s.get("surname", ""), s.get("name", ""),
+        ROLE_LABELS.get(s.get("role", ""), s.get("role", "")),
+        " | ".join([teams.get(tid, tid) for tid in s.get("team_ids", [])]),
+        s.get("dni", ""), s.get("phone", ""), s.get("email", ""),
+        s.get("address", ""), s.get("city", ""),
+        CONTRACT_LABELS.get(s.get("contract_type", ""), s.get("contract_type", "")),
+        s.get("contract_start", ""), s.get("contract_end", ""),
+        s.get("bank_iban", ""),
+        "Activo" if s.get("active", True) else "Baja",
+        s.get("notes", ""),
+    ] for s in staff_list]
+    buf = _make_excel("Personal", headers, rows)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=personal.xlsx"},
     )
 
 
