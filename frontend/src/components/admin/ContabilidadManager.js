@@ -59,7 +59,7 @@ const MONTH_NAMES = [
 ];
 
 // ── Entry Form (module-level component) ─────────────────────────────────────
-function EntryForm({ initial, onSave, onCancel, saving }) {
+function EntryForm({ initial, onSave, onCancel, saving, bankAccounts, people }) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState(
     initial || {
@@ -70,15 +70,25 @@ function EntryForm({ initial, onSave, onCancel, saving }) {
       date: today,
       supplier_or_client: "",
       payment_method: "bank_transfer",
+      cash_or_bank: "bank",
       reference: "",
       is_recurring: false,
       recurring_period: "",
       notes: "",
+      person_id: "",
+      person_type: "",
+      person_name: "",
     }
   );
+  const [personSearch, setPersonSearch] = useState(form.person_name || "");
+  const [showPersonSug, setShowPersonSug] = useState(false);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const cats = form.type === "ingreso" ? CATEGORIAS_INGRESO : CATEGORIAS_GASTO;
+
+  const personSuggestions = personSearch.length > 1
+    ? (people || []).filter(p => `${p.name} ${p.email}`.toLowerCase().includes(personSearch.toLowerCase())).slice(0, 8)
+    : [];
 
   // Reset category when type changes if it doesn't belong to new type
   const handleTypeChange = (t) => {
@@ -207,6 +217,63 @@ function EntryForm({ initial, onSave, onCancel, saving }) {
               <SelectItem value="sepa">SEPA / Domiciliación</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Cash or bank account */}
+        <div className="col-span-2">
+          <Label className="text-xs text-[#64748B] mb-1.5 block">Caja / Cuenta bancaria *</Label>
+          <Select value={form.cash_or_bank} onValueChange={(v) => set("cash_or_bank", v)}>
+            <SelectTrigger className="h-9 text-sm">
+              <SelectValue placeholder="Seleccionar..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="cash">💵 Caja (efectivo)</SelectItem>
+              {(bankAccounts || []).length > 0 && (bankAccounts || []).map((acc, i) => (
+                <SelectItem key={acc.id || i} value={acc.id || `bank_${i}`}>
+                  🏦 {acc.label || "Cuenta " + (i + 1)}{acc.iban ? ` · ${acc.iban.slice(-4)}` : ""}
+                </SelectItem>
+              ))}
+              {(bankAccounts || []).length === 0 && (
+                <SelectItem value="bank">🏦 Cuenta bancaria principal</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Linked person */}
+        <div className="col-span-2 relative">
+          <Label className="text-xs text-[#64748B] mb-1.5 block">Deportista / Socio vinculado (opcional)</Label>
+          {form.person_name ? (
+            <div className="flex items-center gap-2 bg-[#EEF2FF] border border-[#2460FF]/30 rounded-lg px-3 py-2">
+              <span className="text-sm text-[#00296B] font-medium flex-1">{form.person_name}</span>
+              <span className="text-xs text-[#2460FF]">{form.person_type === "player" ? "Deportista" : "Socio"}</span>
+              <button type="button" onClick={() => { set("person_id",""); set("person_type",""); set("person_name",""); setPersonSearch(""); }} className="text-[#94A3B8] hover:text-red-500 ml-1"><X size={14} /></button>
+            </div>
+          ) : (
+            <div className="relative">
+              <Input
+                value={personSearch}
+                onChange={(e) => { setPersonSearch(e.target.value); setShowPersonSug(true); }}
+                onFocus={() => setShowPersonSug(true)}
+                onBlur={() => setTimeout(() => setShowPersonSug(false), 200)}
+                placeholder="Buscar deportista o socio..."
+                className="h-9 text-sm"
+              />
+              {showPersonSug && personSuggestions.length > 0 && (
+                <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[#E2E8F0] rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                  {personSuggestions.map(p => (
+                    <button key={p.id} type="button" onMouseDown={() => {
+                      set("person_id", p.rawId); set("person_type", p.type); set("person_name", p.name);
+                      setPersonSearch(p.name); setShowPersonSug(false);
+                    }} className="w-full text-left px-3 py-2 hover:bg-[#F4F7FB] flex items-center justify-between gap-2">
+                      <span className="text-sm text-[#0F172A]">{p.name}</span>
+                      <span className="text-xs text-[#94A3B8]">{p.typeLabel} · {p.email}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Reference */}
@@ -480,7 +547,10 @@ function EntryRow({ entry, onEdit, onDelete }) {
           {ALL_CATEGORIAS[entry.category] || entry.category}
         </td>
         <td className="px-4 py-3 text-sm font-medium text-[#1E293B]">{entry.concept}</td>
-        <td className="px-4 py-3 text-xs text-[#64748B]">{entry.supplier_or_client || "-"}</td>
+        <td className="px-4 py-3 text-xs text-[#64748B]">
+          <div>{entry.person_name ? <span className="text-[#2460FF] font-medium">{entry.person_name}</span> : (entry.supplier_or_client || "-")}</div>
+          {entry.cash_or_bank && <div className="text-[#94A3B8] mt-0.5">{entry.cash_or_bank === "cash" ? "💵 Caja" : `🏦 ${entry.cash_or_bank}`}</div>}
+        </td>
         <td className="px-4 py-3 text-right">
           <span
             className={`font-heading font-bold text-sm ${
@@ -508,6 +578,16 @@ function EntryRow({ entry, onEdit, onDelete }) {
                 <p className="font-medium text-[#94A3B8] mb-0.5">Método de pago</p>
                 <p>{METHOD_LABEL[entry.payment_method] || entry.payment_method || "-"}</p>
               </div>
+              <div>
+                <p className="font-medium text-[#94A3B8] mb-0.5">Caja / Cuenta</p>
+                <p>{entry.cash_or_bank === "cash" ? "💵 Caja" : entry.cash_or_bank ? `🏦 ${entry.cash_or_bank}` : "-"}</p>
+              </div>
+              {entry.person_name && (
+                <div>
+                  <p className="font-medium text-[#94A3B8] mb-0.5">{entry.person_type === "player" ? "Deportista" : "Socio"}</p>
+                  <p className="text-[#2460FF] font-medium">{entry.person_name}</p>
+                </div>
+              )}
               <div>
                 <p className="font-medium text-[#94A3B8] mb-0.5">Recurrente</p>
                 <p>
@@ -562,6 +642,10 @@ export default function ContabilidadManager() {
   const [filterYear, setFilterYear] = useState(String(currentYear));
   const [filterMonth, setFilterMonth] = useState("todos");
 
+  // Aux data for form
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [people, setPeople] = useState([]);
+
   // Dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editEntry, setEditEntry] = useState(null);
@@ -569,6 +653,26 @@ export default function ContabilidadManager() {
 
   // Delete confirm
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const fetchAuxData = useCallback(async () => {
+    try {
+      const [sr, pr, mr] = await Promise.all([
+        ax.get("/settings"),
+        ax.get("/players"),
+        ax.get("/members"),
+      ]);
+      const s = sr.data || {};
+      const accts = s.bank_accounts?.length ? s.bank_accounts
+        : s.bank_iban ? [{ id: "main", label: "Cuenta principal", iban: s.bank_iban }]
+        : [];
+      setBankAccounts(accts);
+      const all = [
+        ...(pr.data || []).map(p => ({ id: `p_${p.id}`, rawId: p.id, name: `${p.name || ""} ${p.surname || ""}`.trim(), email: p.email || "", type: "player", typeLabel: "Deportista" })),
+        ...(mr.data || []).map(m => ({ id: `m_${m.id}`, rawId: m.id, name: `${m.name || ""} ${m.surname || ""}`.trim(), email: m.email || "", type: "member", typeLabel: "Socio" })),
+      ].filter(p => p.name);
+      setPeople(all);
+    } catch {}
+  }, []);
 
   const fetchEntries = useCallback(async () => {
     try {
@@ -595,8 +699,8 @@ export default function ContabilidadManager() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchEntries(), fetchSummary()]).finally(() => setLoading(false));
-  }, [fetchEntries, fetchSummary]);
+    Promise.all([fetchEntries(), fetchSummary(), fetchAuxData()]).finally(() => setLoading(false));
+  }, [fetchEntries, fetchSummary, fetchAuxData]);
 
   const filteredEntries = useMemo(() => {
     const q = search.toLowerCase();
@@ -885,6 +989,8 @@ export default function ContabilidadManager() {
             onSave={handleSave}
             onCancel={() => { setDialogOpen(false); setEditEntry(null); }}
             saving={saving}
+            bankAccounts={bankAccounts}
+            people={people}
           />
         </DialogContent>
       </Dialog>

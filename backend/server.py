@@ -284,9 +284,13 @@ class AccountingEntryCreate(BaseModel):
     amount: float
     date: str  # YYYY-MM-DD
     payment_method: Optional[str] = "bank_transfer"  # cash|bank_transfer|card|sepa
+    cash_or_bank: Optional[str] = "bank"  # "cash" or bank_account id/label
     reference: Optional[str] = ""
     notes: Optional[str] = ""
     supplier_or_client: Optional[str] = ""
+    person_id: Optional[str] = ""        # player or member id
+    person_type: Optional[str] = ""      # "player" | "member"
+    person_name: Optional[str] = ""      # denormalized for display
     is_recurring: Optional[bool] = False
     recurring_period: Optional[str] = ""  # monthly|quarterly|annual
 
@@ -297,9 +301,13 @@ class AccountingEntryUpdate(BaseModel):
     amount: Optional[float] = None
     date: Optional[str] = None
     payment_method: Optional[str] = None
+    cash_or_bank: Optional[str] = None
     reference: Optional[str] = None
     notes: Optional[str] = None
     supplier_or_client: Optional[str] = None
+    person_id: Optional[str] = None
+    person_type: Optional[str] = None
+    person_name: Optional[str] = None
     is_recurring: Optional[bool] = None
     recurring_period: Optional[str] = None
 
