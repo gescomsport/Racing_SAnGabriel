@@ -55,8 +55,8 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
-def create_access_token(user_id: str, email: str) -> str:
-    payload = {"sub": user_id, "email": email, "exp": datetime.now(timezone.utc) + timedelta(hours=24), "type": "access"}
+def create_access_token(user_id: str, email: str, club_id: str = "racing_sangabriel") -> str:
+    payload = {"sub": user_id, "email": email, "club_id": club_id, "exp": datetime.now(timezone.utc) + timedelta(hours=24), "type": "access"}
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 def create_refresh_token(user_id: str) -> str:
@@ -80,11 +80,17 @@ async def get_current_user(request: Request):
             raise HTTPException(status_code=401, detail="Usuario no encontrado")
         user["_id"] = str(user["_id"])
         user.pop("password_hash", None)
+        if "club_id" not in user:
+            user["club_id"] = "racing_sangabriel"
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token invalido")
+
+async def get_club_id_from_request(request: Request) -> str:
+    user = await get_current_user(request)
+    return user.get("club_id", "racing_sangabriel")
 
 # Pydantic models
 class LoginRequest(BaseModel):
@@ -148,6 +154,8 @@ class PlayerCreate(BaseModel):
     blood_type: Optional[str] = ""
     # Familia
     family_id: Optional[str] = ""
+    # Bancario
+    bank_iban: Optional[str] = ""
     # Estado
     status: Optional[str] = "active"
     notes: Optional[str] = ""
@@ -568,6 +576,24 @@ class CommSendRequest(BaseModel):
     list_id: Optional[str] = ""
     recipient_emails: Optional[List[str]] = []
 
+class SponsorCreate(BaseModel):
+    name: str
+    logo_url: Optional[str] = ""
+    website_url: Optional[str] = ""
+    description: Optional[str] = ""
+    tier: Optional[str] = "plata"  # oro, plata, bronce
+    active: Optional[bool] = True
+    order: Optional[int] = 0
+
+class SponsorUpdate(BaseModel):
+    name: Optional[str] = None
+    logo_url: Optional[str] = None
+    website_url: Optional[str] = None
+    description: Optional[str] = None
+    tier: Optional[str] = None
+    active: Optional[bool] = None
+    order: Optional[int] = None
+
 # Create app
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -580,11 +606,12 @@ async def login(request_data: LoginRequest, response: Response):
     if not user or not verify_password(request_data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     user_id = str(user["_id"])
-    access_token = create_access_token(user_id, email)
+    club_id = user.get("club_id", "racing_sangabriel")
+    access_token = create_access_token(user_id, email, club_id)
     refresh_token = create_refresh_token(user_id)
     response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
     response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
-    return {"id": user_id, "email": user["email"], "name": user.get("name", ""), "role": user.get("role", "admin"), "token": access_token}
+    return {"id": user_id, "email": user["email"], "name": user.get("name", ""), "role": user.get("role", "admin"), "club_id": club_id, "token": access_token}
 
 @api_router.get("/auth/me")
 async def get_me(request: Request):
@@ -599,53 +626,57 @@ async def logout(response: Response):
 
 # --- NEWS ENDPOINTS ---
 @api_router.get("/news")
-async def get_news(limit: int = 50):
-    news = await db.news.find({}, {"_id": 0}).sort("created_at", -1).to_list(limit)
+async def get_news(limit: int = 50, club_id: str = "racing_sangabriel"):
+    news = await db.news.find({"club_id": club_id}, {"_id": 0}).sort("created_at", -1).to_list(limit)
     return news
 
 @api_router.post("/news")
 async def create_news(data: NewsCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.news.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.put("/news/{news_id}")
 async def update_news(news_id: str, data: NewsUpdate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if update_data:
-        await db.news.update_one({"id": news_id}, {"$set": update_data})
-    updated = await db.news.find_one({"id": news_id}, {"_id": 0})
+        await db.news.update_one({"id": news_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.news.find_one({"id": news_id, "club_id": club_id}, {"_id": 0})
     return updated
 
 @api_router.delete("/news/{news_id}")
 async def delete_news(news_id: str, request: Request):
-    await get_current_user(request)
-    await db.news.delete_one({"id": news_id})
+    club_id = await get_club_id_from_request(request)
+    await db.news.delete_one({"id": news_id, "club_id": club_id})
     return {"message": "Noticia eliminada"}
 
 
 # --- SOCIAL POSTS (from webhooks/automation) ---
 @api_router.get("/social-posts")
-async def get_social_posts(source: Optional[str] = None, limit: int = 8):
-    query = {"source": source} if source else {}
+async def get_social_posts(source: Optional[str] = None, limit: int = 8, club_id: str = "racing_sangabriel"):
+    query: dict = {"club_id": club_id}
+    if source:
+        query["source"] = source
     posts = await db.social_posts.find(query, {"_id": 0}).sort("posted_at", -1).to_list(limit)
     return posts
 
 @api_router.post("/webhook/social-post")
-async def receive_social_post(data: SocialPostWebhook):
+async def receive_social_post(data: SocialPostWebhook, club_id: str = "racing_sangabriel"):
     """Webhook endpoint - receives posts from n8n/Make/Zapier automation.
     No auth required (uses optional api_key for security).
     """
     webhook_key = os.environ.get("WEBHOOK_API_KEY", "")
     if webhook_key and data.api_key != webhook_key:
         raise HTTPException(status_code=403, detail="Invalid API key")
-    
+
     doc = {
         "id": str(uuid.uuid4()),
+        "club_id": club_id,
         "source": data.source.lower(),
         "content": data.content or "",
         "image_url": data.image_url or "",
@@ -659,45 +690,46 @@ async def receive_social_post(data: SocialPostWebhook):
 
 @api_router.delete("/social-posts/{post_id}")
 async def delete_social_post(post_id: str, request: Request):
-    await get_current_user(request)
-    await db.social_posts.delete_one({"id": post_id})
+    club_id = await get_club_id_from_request(request)
+    await db.social_posts.delete_one({"id": post_id, "club_id": club_id})
     return {"message": "Post eliminado"}
 
 
 # --- TEAMS ENDPOINTS ---
 @api_router.get("/teams")
-async def get_teams():
-    teams = await db.teams.find({}, {"_id": 0}).to_list(100)
+async def get_teams(club_id: str = "racing_sangabriel"):
+    teams = await db.teams.find({"club_id": club_id}, {"_id": 0}).to_list(100)
     return teams
 
 @api_router.post("/teams")
 async def create_team(data: TeamCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.teams.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.put("/teams/{team_id}")
 async def update_team(team_id: str, data: TeamCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     update_data = data.model_dump()
-    await db.teams.update_one({"id": team_id}, {"$set": update_data})
-    updated = await db.teams.find_one({"id": team_id}, {"_id": 0})
+    await db.teams.update_one({"id": team_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.teams.find_one({"id": team_id, "club_id": club_id}, {"_id": 0})
     return updated
 
 @api_router.delete("/teams/{team_id}")
 async def delete_team(team_id: str, request: Request):
-    await get_current_user(request)
-    await db.teams.delete_one({"id": team_id})
-    await db.players.delete_many({"team_id": team_id})
+    club_id = await get_club_id_from_request(request)
+    await db.teams.delete_one({"id": team_id, "club_id": club_id})
+    await db.players.delete_many({"team_id": team_id, "club_id": club_id})
     return {"message": "Equipo eliminado"}
 
 # --- PLAYERS ENDPOINTS ---
 @api_router.get("/players")
-async def get_players(team_id: Optional[str] = None, status: Optional[str] = None):
-    query = {}
+async def get_players(team_id: Optional[str] = None, status: Optional[str] = None, club_id: str = "racing_sangabriel"):
+    query: dict = {"club_id": club_id}
     if team_id:
         query["team_id"] = team_id
     if status:
@@ -707,17 +739,18 @@ async def get_players(team_id: Optional[str] = None, status: Optional[str] = Non
 
 @api_router.get("/players/{player_id}")
 async def get_player(player_id: str, request: Request):
-    await get_current_user(request)
-    player = await db.players.find_one({"id": player_id}, {"_id": 0})
+    club_id = await get_club_id_from_request(request)
+    player = await db.players.find_one({"id": player_id, "club_id": club_id}, {"_id": 0})
     if not player:
         raise HTTPException(status_code=404, detail="Jugador no encontrado")
     return player
 
 @api_router.post("/players")
 async def create_player(data: PlayerCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     if not doc.get("family_id"):
         doc["family_id"] = str(uuid.uuid4())
@@ -726,74 +759,78 @@ async def create_player(data: PlayerCreate, request: Request):
 
 @api_router.put("/players/{player_id}")
 async def update_player(player_id: str, data: PlayerCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     update_data = data.model_dump()
-    await db.players.update_one({"id": player_id}, {"$set": update_data})
-    updated = await db.players.find_one({"id": player_id}, {"_id": 0})
+    await db.players.update_one({"id": player_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.players.find_one({"id": player_id, "club_id": club_id}, {"_id": 0})
     return updated
 
 @api_router.delete("/players/{player_id}")
 async def delete_player(player_id: str, request: Request):
-    await get_current_user(request)
-    await db.players.delete_one({"id": player_id})
+    club_id = await get_club_id_from_request(request)
+    await db.players.delete_one({"id": player_id, "club_id": club_id})
     return {"message": "Jugador eliminado"}
 
 # --- GUARDIANS ENDPOINTS ---
 @api_router.get("/guardians")
 async def get_guardians(request: Request):
-    await get_current_user(request)
-    guardians = await db.guardians.find({}, {"_id": 0}).sort("name", 1).to_list(500)
+    club_id = await get_club_id_from_request(request)
+    guardians = await db.guardians.find({"club_id": club_id}, {"_id": 0}).sort("name", 1).to_list(500)
     return guardians
 
 @api_router.get("/guardians/by-player/{player_id}")
 async def get_guardians_by_player(player_id: str, request: Request):
-    await get_current_user(request)
-    guardians = await db.guardians.find({"player_ids": player_id}, {"_id": 0}).to_list(10)
+    club_id = await get_club_id_from_request(request)
+    guardians = await db.guardians.find({"player_ids": player_id, "club_id": club_id}, {"_id": 0}).to_list(10)
     return guardians
 
 @api_router.post("/guardians")
 async def create_guardian(data: GuardianCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.guardians.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.put("/guardians/{guardian_id}")
 async def update_guardian(guardian_id: str, data: GuardianUpdate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if update_data:
-        await db.guardians.update_one({"id": guardian_id}, {"$set": update_data})
-    updated = await db.guardians.find_one({"id": guardian_id}, {"_id": 0})
+        await db.guardians.update_one({"id": guardian_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.guardians.find_one({"id": guardian_id, "club_id": club_id}, {"_id": 0})
     return updated
 
 @api_router.delete("/guardians/{guardian_id}")
 async def delete_guardian(guardian_id: str, request: Request):
-    await get_current_user(request)
-    await db.guardians.delete_one({"id": guardian_id})
+    club_id = await get_club_id_from_request(request)
+    await db.guardians.delete_one({"id": guardian_id, "club_id": club_id})
     return {"message": "Tutor eliminado"}
 
 # --- MEMBERS (SOCIOS) ENDPOINTS ---
 @api_router.get("/members")
 async def get_members(request: Request, status: Optional[str] = None):
-    await get_current_user(request)
-    query = {"status": status} if status else {}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
+    if status:
+        query["status"] = status
     members = await db.members.find(query, {"_id": 0}).sort("name", 1).to_list(500)
     return members
 
 @api_router.get("/members/count")
-async def get_members_count():
-    count = await db.members.count_documents({})
+async def get_members_count(club_id: str = "racing_sangabriel"):
+    count = await db.members.count_documents({"club_id": club_id})
     return {"count": count}
 
 @api_router.post("/members")
 async def create_member(data: MemberCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
-    count = await db.members.count_documents({})
+    doc["club_id"] = club_id
+    count = await db.members.count_documents({"club_id": club_id})
     doc["member_number"] = f"S{count + 1:04d}"
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.members.insert_one(doc)
@@ -801,92 +838,98 @@ async def create_member(data: MemberCreate, request: Request):
 
 @api_router.put("/members/{member_id}")
 async def update_member(member_id: str, data: MemberUpdate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if update_data:
-        await db.members.update_one({"id": member_id}, {"$set": update_data})
-    updated = await db.members.find_one({"id": member_id}, {"_id": 0})
+        await db.members.update_one({"id": member_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.members.find_one({"id": member_id, "club_id": club_id}, {"_id": 0})
     return updated
 
 @api_router.delete("/members/{member_id}")
 async def delete_member(member_id: str, request: Request):
-    await get_current_user(request)
-    await db.members.delete_one({"id": member_id})
+    club_id = await get_club_id_from_request(request)
+    await db.members.delete_one({"id": member_id, "club_id": club_id})
     return {"message": "Socio eliminado"}
 
 # --- TRAINING SCHEDULES ENDPOINTS ---
 @api_router.get("/training-schedules")
-async def get_training_schedules(team_id: Optional[str] = None):
-    query = {"team_id": team_id} if team_id else {}
+async def get_training_schedules(team_id: Optional[str] = None, club_id: str = "racing_sangabriel"):
+    query: dict = {"club_id": club_id}
+    if team_id:
+        query["team_id"] = team_id
     schedules = await db.training_schedules.find(query, {"_id": 0}).to_list(200)
     return schedules
 
 @api_router.post("/training-schedules")
 async def create_training_schedule(data: TrainingScheduleCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.training_schedules.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.put("/training-schedules/{schedule_id}")
 async def update_training_schedule(schedule_id: str, data: TrainingScheduleCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     update_data = data.model_dump()
-    await db.training_schedules.update_one({"id": schedule_id}, {"$set": update_data})
-    updated = await db.training_schedules.find_one({"id": schedule_id}, {"_id": 0})
+    await db.training_schedules.update_one({"id": schedule_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.training_schedules.find_one({"id": schedule_id, "club_id": club_id}, {"_id": 0})
     return updated
 
 @api_router.delete("/training-schedules/{schedule_id}")
 async def delete_training_schedule(schedule_id: str, request: Request):
-    await get_current_user(request)
-    await db.training_schedules.delete_one({"id": schedule_id})
+    club_id = await get_club_id_from_request(request)
+    await db.training_schedules.delete_one({"id": schedule_id, "club_id": club_id})
     return {"message": "Horario eliminado"}
 
 # --- MATCHES ENDPOINTS ---
 @api_router.get("/matches")
-async def get_matches(status: Optional[str] = None):
-    query = {"status": status} if status else {}
+async def get_matches(status: Optional[str] = None, club_id: str = "racing_sangabriel"):
+    query: dict = {"club_id": club_id}
+    if status:
+        query["status"] = status
     matches = await db.matches.find(query, {"_id": 0}).sort("date", 1).to_list(200)
     return matches
 
 @api_router.post("/matches")
 async def create_match(data: MatchCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.matches.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.put("/matches/{match_id}")
 async def update_match(match_id: str, data: MatchCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     update_data = data.model_dump()
-    await db.matches.update_one({"id": match_id}, {"$set": update_data})
-    updated = await db.matches.find_one({"id": match_id}, {"_id": 0})
+    await db.matches.update_one({"id": match_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.matches.find_one({"id": match_id, "club_id": club_id}, {"_id": 0})
     return updated
 
 @api_router.delete("/matches/{match_id}")
 async def delete_match(match_id: str, request: Request):
-    await get_current_user(request)
-    await db.matches.delete_one({"id": match_id})
+    club_id = await get_club_id_from_request(request)
+    await db.matches.delete_one({"id": match_id, "club_id": club_id})
     return {"message": "Partido eliminado"}
 
 # --- GALLERY ENDPOINTS ---
 @api_router.get("/gallery")
-async def get_gallery(section: Optional[str] = None):
-    query: dict = {}
+async def get_gallery(section: Optional[str] = None, club_id: str = "racing_sangabriel"):
+    query: dict = {"club_id": club_id}
     if section:
         query["section"] = section
     items = await db.gallery.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
     return items
 
 @api_router.get("/gallery/public")
-async def get_gallery_public(section: Optional[str] = None):
+async def get_gallery_public(section: Optional[str] = None, club_id: str = "racing_sangabriel"):
     """Public endpoint — no auth required. Used by the HTML website to load images."""
-    query: dict = {"visible": True}
+    query: dict = {"visible": True, "club_id": club_id}
     if section:
         query["section"] = section
     items = await db.gallery.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
@@ -894,18 +937,19 @@ async def get_gallery_public(section: Optional[str] = None):
 
 @api_router.post("/gallery")
 async def create_gallery_item(data: GalleryCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.gallery.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.put("/gallery/{item_id}")
 async def update_gallery_item(item_id: str, data: dict, request: Request):
-    await get_current_user(request)
-    await db.gallery.update_one({"id": item_id}, {"$set": data})
-    updated = await db.gallery.find_one({"id": item_id}, {"_id": 0})
+    club_id = await get_club_id_from_request(request)
+    await db.gallery.update_one({"id": item_id, "club_id": club_id}, {"$set": data})
+    updated = await db.gallery.find_one({"id": item_id, "club_id": club_id}, {"_id": 0})
     return updated
 
 @api_router.post("/gallery/upload")
@@ -917,7 +961,7 @@ async def upload_gallery_image(
     description: str = Form(""),
 ):
     """Upload an image file and create a gallery item."""
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     import os, base64
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
@@ -935,6 +979,7 @@ async def upload_gallery_image(
     image_url = f"/api/uploads/{filename}"
     doc = {
         "id": str(uuid.uuid4()),
+        "club_id": club_id,
         "title": title or file.filename,
         "image_url": image_url,
         "description": description,
@@ -945,6 +990,24 @@ async def upload_gallery_image(
     }
     await db.gallery.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
+
+@api_router.post("/upload")
+async def upload_file(request: Request, file: UploadFile = File(...)):
+    """Upload any image file and return its URL (no gallery entry created)."""
+    await get_current_user(request)
+    import os
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Imagen demasiado grande (máx 10 MB)")
+    ext = (file.filename or "img.jpg").rsplit(".", 1)[-1].lower()
+    if ext not in ("jpg", "jpeg", "png", "gif", "webp", "svg"):
+        raise HTTPException(status_code=400, detail="Formato no permitido")
+    upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"{uuid.uuid4()}.{ext}"
+    with open(os.path.join(upload_dir, filename), "wb") as f:
+        f.write(content)
+    return {"url": f"/api/uploads/{filename}"}
 
 @api_router.get("/uploads/{filename}")
 async def serve_upload(filename: str):
@@ -959,22 +1022,82 @@ async def serve_upload(filename: str):
 
 @api_router.delete("/gallery/{item_id}")
 async def delete_gallery_item(item_id: str, request: Request):
-    await get_current_user(request)
-    item = await db.gallery.find_one({"id": item_id})
+    club_id = await get_club_id_from_request(request)
+    item = await db.gallery.find_one({"id": item_id, "club_id": club_id})
     if item and item.get("image_url", "").startswith("/api/uploads/"):
         import os
         filename = item["image_url"].split("/")[-1]
         filepath = os.path.join(os.path.dirname(__file__), "uploads", filename)
         if os.path.exists(filepath):
             os.remove(filepath)
-    await db.gallery.delete_one({"id": item_id})
+    await db.gallery.delete_one({"id": item_id, "club_id": club_id})
     return {"message": "Imagen eliminada"}
+
+# --- SPONSORS ENDPOINTS ---
+@api_router.get("/sponsors")
+async def get_sponsors(active_only: bool = False, club_id: str = "racing_sangabriel"):
+    query: dict = {"club_id": club_id}
+    if active_only:
+        query["active"] = True
+    items = await db.sponsors.find(query, {"_id": 0}).sort("order", 1).to_list(200)
+    return items
+
+@api_router.post("/sponsors")
+async def create_sponsor(data: SponsorCreate, request: Request):
+    club_id = await get_club_id_from_request(request)
+    doc = data.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.sponsors.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+@api_router.put("/sponsors/{sponsor_id}")
+async def update_sponsor(sponsor_id: str, data: SponsorUpdate, request: Request):
+    club_id = await get_club_id_from_request(request)
+    update = {k: v for k, v in data.model_dump().items() if v is not None}
+    await db.sponsors.update_one({"id": sponsor_id, "club_id": club_id}, {"$set": update})
+    updated = await db.sponsors.find_one({"id": sponsor_id, "club_id": club_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/sponsors/{sponsor_id}")
+async def delete_sponsor(sponsor_id: str, request: Request):
+    club_id = await get_club_id_from_request(request)
+    sponsor = await db.sponsors.find_one({"id": sponsor_id, "club_id": club_id})
+    if sponsor and sponsor.get("logo_url", "").startswith("/api/uploads/"):
+        import os
+        filename = sponsor["logo_url"].split("/")[-1]
+        filepath = os.path.join(os.path.dirname(__file__), "uploads", filename)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    await db.sponsors.delete_one({"id": sponsor_id, "club_id": club_id})
+    return {"message": "Patrocinador eliminado"}
+
+@api_router.post("/sponsors/{sponsor_id}/upload-logo")
+async def upload_sponsor_logo(sponsor_id: str, request: Request, file: UploadFile = File(...)):
+    club_id = await get_club_id_from_request(request)
+    import os
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Logo demasiado grande (máx 5 MB)")
+    ext = (file.filename or "logo.png").rsplit(".", 1)[-1].lower()
+    if ext not in ("jpg", "jpeg", "png", "webp", "svg"):
+        raise HTTPException(status_code=400, detail="Formato no permitido")
+    upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"sponsor_{uuid.uuid4()}.{ext}"
+    with open(os.path.join(upload_dir, filename), "wb") as f:
+        f.write(content)
+    logo_url = f"/api/uploads/{filename}"
+    await db.sponsors.update_one({"id": sponsor_id, "club_id": club_id}, {"$set": {"logo_url": logo_url}})
+    return {"logo_url": logo_url}
 
 # --- CONTACT ENDPOINTS ---
 @api_router.post("/contact")
-async def submit_contact(data: ContactCreate):
+async def submit_contact(data: ContactCreate, club_id: str = "racing_sangabriel"):
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     doc["read"] = False
     await db.contacts.insert_one(doc)
@@ -982,23 +1105,23 @@ async def submit_contact(data: ContactCreate):
 
 @api_router.get("/contact")
 async def get_contacts(request: Request):
-    await get_current_user(request)
-    contacts = await db.contacts.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    club_id = await get_club_id_from_request(request)
+    contacts = await db.contacts.find({"club_id": club_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
     return contacts
 
 @api_router.put("/contact/{contact_id}/read")
 async def mark_contact_read(contact_id: str, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     body = await request.json() if request.headers.get("content-length", "0") != "0" else {}
     read_value = body.get("read", True)
-    await db.contacts.update_one({"id": contact_id}, {"$set": {"read": read_value}})
+    await db.contacts.update_one({"id": contact_id, "club_id": club_id}, {"$set": {"read": read_value}})
     return {"message": "Actualizado"}
 
 @api_router.post("/contact/{contact_id}/reply")
 async def reply_to_contact(contact_id: str, body: dict, request: Request):
     """Reply to a contact message using club SMTP settings."""
-    await get_current_user(request)
-    contact = await db.contacts.find_one({"id": contact_id})
+    club_id = await get_club_id_from_request(request)
+    contact = await db.contacts.find_one({"id": contact_id, "club_id": club_id})
     if not contact:
         raise HTTPException(status_code=404, detail="Mensaje no encontrado")
     reply_text = body.get("message", "")
@@ -1006,7 +1129,7 @@ async def reply_to_contact(contact_id: str, body: dict, request: Request):
     to_email = contact.get("email", "")
     if not to_email:
         raise HTTPException(status_code=400, detail="El mensaje no tiene email de respuesta")
-    settings = await db.settings.find_one({"type": "club"}, {"_id": 0}) or {}
+    settings = await db.settings.find_one({"club_id": club_id}, {"_id": 0}) or {}
     smtp_host = settings.get("smtp_host", "")
     smtp_port = int(settings.get("smtp_port", 587))
     smtp_user = settings.get("smtp_user", "")
@@ -1035,21 +1158,22 @@ async def reply_to_contact(contact_id: str, body: dict, request: Request):
             server.sendmail(from_email, [to_email], msg.as_string())
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al enviar: {str(e)}")
-    await db.contacts.update_one({"id": contact_id}, {"$set": {"read": True, "replied": True, "replied_at": datetime.now(timezone.utc).isoformat()}})
+    await db.contacts.update_one({"id": contact_id, "club_id": club_id}, {"$set": {"read": True, "replied": True, "replied_at": datetime.now(timezone.utc).isoformat()}})
     return {"message": "Respuesta enviada correctamente"}
 
 @api_router.delete("/contact/{contact_id}")
 async def delete_contact(contact_id: str, request: Request):
-    await get_current_user(request)
-    await db.contacts.delete_one({"id": contact_id})
+    club_id = await get_club_id_from_request(request)
+    await db.contacts.delete_one({"id": contact_id, "club_id": club_id})
     return {"message": "Mensaje eliminado"}
 
 # --- SETTINGS ENDPOINTS ---
 @api_router.get("/settings")
-async def get_settings():
-    settings = await db.settings.find_one({"type": "club"}, {"_id": 0})
+async def get_settings(club_id: str = "racing_sangabriel"):
+    settings = await db.settings.find_one({"club_id": club_id}, {"_id": 0})
     if not settings:
         settings = {
+            "club_id": club_id,
             "type": "club",
             "club_name": "Racing San Gabriel A.D.C.",
             "description": "Escuela de futbol de referencia en Alicante. Ubicada en el corazon de Alacant, ofrecemos una experiencia deportiva de primer nivel. Futbol base, futbol femenino, futbol sala y mucho mas.",
@@ -1073,49 +1197,52 @@ async def get_settings():
 
 @api_router.put("/settings")
 async def update_settings(data: SettingsUpdate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if update_data:
-        await db.settings.update_one({"type": "club"}, {"$set": update_data}, upsert=True)
-    settings = await db.settings.find_one({"type": "club"}, {"_id": 0})
+        await db.settings.update_one({"club_id": club_id}, {"$set": update_data}, upsert=True)
+    settings = await db.settings.find_one({"club_id": club_id}, {"_id": 0})
     return settings
 
 # --- FEES (TARIFAS) ENDPOINTS ---
 @api_router.get("/fees")
-async def get_fees(active_only: bool = False):
-    query = {"active": True} if active_only else {}
+async def get_fees(active_only: bool = False, club_id: str = "racing_sangabriel"):
+    query: dict = {"club_id": club_id}
+    if active_only:
+        query["active"] = True
     fees = await db.fees.find(query, {"_id": 0}).sort("name", 1).to_list(100)
     return fees
 
 @api_router.post("/fees")
 async def create_fee(data: FeeCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.fees.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.put("/fees/{fee_id}")
 async def update_fee(fee_id: str, data: FeeUpdate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if update_data:
-        await db.fees.update_one({"id": fee_id}, {"$set": update_data})
-    updated = await db.fees.find_one({"id": fee_id}, {"_id": 0})
+        await db.fees.update_one({"id": fee_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.fees.find_one({"id": fee_id, "club_id": club_id}, {"_id": 0})
     return updated
 
 @api_router.delete("/fees/{fee_id}")
 async def delete_fee(fee_id: str, request: Request):
-    await get_current_user(request)
-    await db.fees.delete_one({"id": fee_id})
+    club_id = await get_club_id_from_request(request)
+    await db.fees.delete_one({"id": fee_id, "club_id": club_id})
     return {"message": "Tarifa eliminada"}
 
 # --- PAYMENTS (PAGOS) ENDPOINTS ---
 @api_router.get("/payments")
 async def get_payments(request: Request, person_id: Optional[str] = None, status: Optional[str] = None):
-    await get_current_user(request)
-    query = {}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
     if person_id:
         query["person_id"] = person_id
     if status:
@@ -1125,9 +1252,10 @@ async def get_payments(request: Request, person_id: Optional[str] = None, status
 
 @api_router.post("/payments")
 async def create_payment(data: PaymentCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     doc["stripe_session_id"] = ""
     doc["stripe_payment_intent_id"] = ""
@@ -1137,38 +1265,38 @@ async def create_payment(data: PaymentCreate, request: Request):
 
 @api_router.put("/payments/{payment_id}")
 async def update_payment(payment_id: str, data: PaymentUpdate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if update_data:
-        await db.payments.update_one({"id": payment_id}, {"$set": update_data})
-    updated = await db.payments.find_one({"id": payment_id}, {"_id": 0})
+        await db.payments.update_one({"id": payment_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.payments.find_one({"id": payment_id, "club_id": club_id}, {"_id": 0})
     return updated
 
 @api_router.delete("/payments/{payment_id}")
 async def delete_payment(payment_id: str, request: Request):
-    await get_current_user(request)
-    await db.payments.delete_one({"id": payment_id})
+    club_id = await get_club_id_from_request(request)
+    await db.payments.delete_one({"id": payment_id, "club_id": club_id})
     return {"message": "Pago eliminado"}
 
 @api_router.get("/payments/report/overdue")
 async def get_overdue_report(request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     overdue = await db.payments.find(
-        {"status": "pending", "due_date": {"$lt": today, "$ne": ""}},
+        {"club_id": club_id, "status": "pending", "due_date": {"$lt": today, "$ne": ""}},
         {"_id": 0}
     ).sort("due_date", 1).to_list(500)
     return overdue
 
 # --- PUBLIC REGISTRATION ENDPOINTS ---
 @api_router.post("/register/player")
-async def register_player(data: PlayerRegistrationRequest):
+async def register_player(data: PlayerRegistrationRequest, request: Request, club_id: str = "racing_sangabriel"):
     """Public endpoint — creates pending player. Supports stripe, bank_transfer, redsys."""
-    fee = await db.fees.find_one({"id": data.fee_id, "active": True}, {"_id": 0})
+    fee = await db.fees.find_one({"id": data.fee_id, "active": True, "club_id": club_id}, {"_id": 0})
     if not fee:
         raise HTTPException(status_code=404, detail="Tarifa no encontrada")
 
-    settings = await db.settings.find_one({"type": "club"}, {"_id": 0}) or {}
+    settings = await db.settings.find_one({"club_id": club_id}, {"_id": 0}) or {}
     club_name = settings.get("club_name", "Club Deportivo")
 
     # Detect if minor
@@ -1199,6 +1327,7 @@ async def register_player(data: PlayerRegistrationRequest):
     # Build player document (common for all methods)
     player_doc = {
         "id": player_id,
+        "club_id": club_id,
         "name": data.name,
         "surname": data.surname,
         "birthdate": data.birthdate,
@@ -1232,6 +1361,7 @@ async def register_player(data: PlayerRegistrationRequest):
 
     payment_doc = {
         "id": str(uuid.uuid4()),
+        "club_id": club_id,
         "person_id": player_id,
         "person_type": "player",
         "fee_id": data.fee_id,
@@ -1280,7 +1410,7 @@ async def register_player(data: PlayerRegistrationRequest):
         payment_doc["stripe_session_id"] = session.id
         payment_doc["notes"] = "Pago online via Stripe"
         await db.players.insert_one(player_doc)
-        await _store_guardian_and_payment(is_minor, data, player_id, family_id, payment_doc)
+        await _store_guardian_and_payment(is_minor, data, player_id, family_id, payment_doc, club_id)
         await send_registration_confirmation("player", player_doc, settings)
         return {"payment_method": "stripe", "checkout_url": session.url, "session_id": session.id}
 
@@ -1289,7 +1419,7 @@ async def register_player(data: PlayerRegistrationRequest):
         player_doc["status"] = "pending_payment"
         payment_doc["notes"] = "Pendiente transferencia bancaria"
         await db.players.insert_one(player_doc)
-        await _store_guardian_and_payment(is_minor, data, player_id, family_id, payment_doc)
+        await _store_guardian_and_payment(is_minor, data, player_id, family_id, payment_doc, club_id)
         await send_registration_confirmation("player", player_doc, settings)
         return {
             "payment_method": "bank_transfer",
@@ -1308,7 +1438,7 @@ async def register_player(data: PlayerRegistrationRequest):
         if not settings.get("redsys_secret_key"):
             raise HTTPException(status_code=503, detail="Redsys no configurado correctamente.")
         await db.players.insert_one(player_doc)
-        await _store_guardian_and_payment(is_minor, data, player_id, family_id, payment_doc)
+        await _store_guardian_and_payment(is_minor, data, player_id, family_id, payment_doc, club_id)
         order = player_id[:12].replace("-", "").upper()[:12].zfill(4)
         params = {
             "DS_MERCHANT_AMOUNT": str(int(fee["amount"] * 100)),
@@ -1340,11 +1470,12 @@ async def register_player(data: PlayerRegistrationRequest):
 
     raise HTTPException(status_code=400, detail="Método de pago no soportado")
 
-async def _store_guardian_and_payment(is_minor: bool, data, player_id: str, family_id: str, payment_doc: dict):
+async def _store_guardian_and_payment(is_minor: bool, data, player_id: str, family_id: str, payment_doc: dict, club_id: str = "racing_sangabriel"):
     """Helper to store guardian (if minor) and payment record."""
     if is_minor and data.guardian:
         guardian_doc = {
             "id": str(uuid.uuid4()),
+            "club_id": club_id,
             "name": data.guardian.name,
             "surname": data.guardian.surname or "",
             "dni": data.guardian.dni or "",
@@ -1363,22 +1494,23 @@ async def _store_guardian_and_payment(is_minor: bool, data, player_id: str, fami
     await db.payments.insert_one(payment_doc)
 
 @api_router.post("/register/member")
-async def register_member(data: MemberRegistrationRequest, request: Request):
+async def register_member(data: MemberRegistrationRequest, request: Request, club_id: str = "racing_sangabriel"):
     """Public endpoint — creates pending member. Supports stripe, bank_transfer, redsys."""
-    fee = await db.fees.find_one({"id": data.fee_id, "active": True}, {"_id": 0})
+    fee = await db.fees.find_one({"id": data.fee_id, "active": True, "club_id": club_id}, {"_id": 0})
     if not fee:
         raise HTTPException(status_code=404, detail="Tarifa no encontrada")
 
-    settings = await db.settings.find_one({"type": "club"}, {"_id": 0}) or {}
+    settings = await db.settings.find_one({"club_id": club_id}, {"_id": 0}) or {}
     club_name = settings.get("club_name", "Club Deportivo")
 
     member_id = str(uuid.uuid4())
-    count = await db.members.count_documents({})
+    count = await db.members.count_documents({"club_id": club_id})
     member_number = f"S{count + 1:04d}"
     payment_method = data.payment_method or "stripe"
 
     member_doc = {
         "id": member_id,
+        "club_id": club_id,
         "name": data.name,
         "surname": data.surname,
         "birthdate": data.birthdate or "",
@@ -1407,6 +1539,7 @@ async def register_member(data: MemberRegistrationRequest, request: Request):
 
     payment_doc = {
         "id": str(uuid.uuid4()),
+        "club_id": club_id,
         "person_id": member_id,
         "person_type": "member",
         "fee_id": data.fee_id,
@@ -1588,8 +1721,8 @@ async def send_email(settings: dict, to_email: str, subject: str, body_html: str
         logger.error(f"Email error: {e}")
         return False
 
-async def get_club_settings():
-    s = await db.settings.find_one({"type": "club"}, {"_id": 0})
+async def get_club_settings(club_id: str = "racing_sangabriel"):
+    s = await db.settings.find_one({"club_id": club_id}, {"_id": 0})
     return s or {}
 
 def get_stripe_key(settings: dict) -> str:
@@ -1600,7 +1733,8 @@ def get_stripe_key(settings: dict) -> str:
 @api_router.post("/settings/test-email")
 async def test_email(request: Request):
     user = await get_current_user(request)
-    settings = await get_club_settings()
+    club_id = user.get("club_id", "racing_sangabriel")
+    settings = await get_club_settings(club_id)
     ok = await send_email(
         settings, user["email"],
         "✅ Prueba de email configurado correctamente",
@@ -1753,16 +1887,19 @@ def mask_iban(iban: str) -> str:
 # --- SEPA MANDATES ---
 @api_router.get("/sepa/mandates")
 async def get_sepa_mandates(request: Request, person_id: Optional[str] = None):
-    await get_current_user(request)
-    query = {"person_id": person_id} if person_id else {}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
+    if person_id:
+        query["person_id"] = person_id
     mandates = await db.sepa_mandates.find(query, {"_id": 0}).sort("signature_date", -1).to_list(500)
     return mandates
 
 @api_router.post("/sepa/mandates")
 async def create_sepa_mandate(data: SepaMandateCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["mandate_ref"] = data.mandate_ref or f"MND-{str(uuid.uuid4())[:8].upper()}"
     doc["debtor_iban"] = encrypt_iban(data.debtor_iban)  # cifrar IBAN en reposo
     doc["status"] = "active"
@@ -1774,8 +1911,8 @@ async def create_sepa_mandate(data: SepaMandateCreate, request: Request):
 
 @api_router.delete("/sepa/mandates/{mandate_id}")
 async def delete_sepa_mandate(mandate_id: str, request: Request):
-    await get_current_user(request)
-    await db.sepa_mandates.update_one({"id": mandate_id}, {"$set": {"status": "cancelled"}})
+    club_id = await get_club_id_from_request(request)
+    await db.sepa_mandates.update_one({"id": mandate_id, "club_id": club_id}, {"$set": {"status": "cancelled"}})
     return {"message": "Mandato cancelado"}
 
 @api_router.post("/sepa/generate-xml")
@@ -1787,8 +1924,8 @@ async def generate_sepa_xml(data: SepaXmlRequest, request: Request):
     - Todos los textos se normalizan al juego de caracteres SEPA (ASCII latino).
     - Límites de campo respetados: EndToEndId/MndtId ≤35, Nm ≤70, Ustrd ≤140.
     """
-    await get_current_user(request)
-    settings = await get_club_settings()
+    club_id = await get_club_id_from_request(request)
+    settings = await get_club_settings(club_id)
 
     creditor_id   = settings.get("sepa_creditor_id", "").replace(" ", "")
     creditor_name = sepa_str(settings.get("sepa_creditor_name") or settings.get("club_name", "Club"), 70)
@@ -1800,7 +1937,7 @@ async def generate_sepa_xml(data: SepaXmlRequest, request: Request):
             detail="Configura el Identificador de Acreedor SEPA (ICS) y el IBAN del club en Ajustes → SEPA.")
 
     mandates = await db.sepa_mandates.find(
-        {"id": {"$in": data.mandate_ids}, "status": "active"}, {"_id": 0}
+        {"id": {"$in": data.mandate_ids}, "status": "active", "club_id": club_id}, {"_id": 0}
     ).to_list(500)
     if not mandates:
         raise HTTPException(status_code=400, detail="No se encontraron mandatos activos con los IDs indicados.")
@@ -1814,7 +1951,7 @@ async def generate_sepa_xml(data: SepaXmlRequest, request: Request):
             amt, payment = float(data.default_amount), None
         else:
             payment = await db.payments.find_one(
-                {"person_id": m["person_id"], "status": "pending"},
+                {"person_id": m["person_id"], "status": "pending", "club_id": club_id},
                 sort=[("created_at", -1)], projection={"_id": 0}
             )
             amt = float(payment["amount"]) if payment and payment.get("amount") else 0.0
@@ -2006,14 +2143,14 @@ async def send_registration_confirmation(person_type: str, person_data: dict, se
 @api_router.post("/notifications/send-overdue-reminders")
 async def send_overdue_reminders(request: Request):
     """Send email reminders to all people with overdue payments."""
-    await get_current_user(request)
-    settings = await get_club_settings()
+    club_id = await get_club_id_from_request(request)
+    settings = await get_club_settings(club_id)
     if not settings.get("smtp_enabled"):
         raise HTTPException(status_code=400, detail="Email SMTP no configurado")
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     overdue = await db.payments.find(
-        {"status": "pending", "due_date": {"$lt": today, "$ne": ""}},
+        {"club_id": club_id, "status": "pending", "due_date": {"$lt": today, "$ne": ""}},
         {"_id": 0}
     ).to_list(500)
 
@@ -2022,9 +2159,9 @@ async def send_overdue_reminders(request: Request):
     for payment in overdue:
         person = None
         if payment["person_type"] == "player":
-            person = await db.players.find_one({"id": payment["person_id"]}, {"_id": 0})
+            person = await db.players.find_one({"id": payment["person_id"], "club_id": club_id}, {"_id": 0})
         else:
-            person = await db.members.find_one({"id": payment["person_id"]}, {"_id": 0})
+            person = await db.members.find_one({"id": payment["person_id"], "club_id": club_id}, {"_id": 0})
         if not person or not person.get("email"):
             continue
         name = f"{person.get('name','')} {person.get('surname','')}".strip()
@@ -2053,16 +2190,16 @@ async def send_overdue_reminders(request: Request):
 @api_router.get("/reports/summary")
 async def reports_summary(request: Request):
     """Dashboard KPIs and aggregated stats for the reports section."""
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
 
     # Parallel aggregations
-    total_players = await db.players.count_documents({})
-    active_players = await db.players.count_documents({"status": "active"})
-    total_members = await db.members.count_documents({})
-    active_members = await db.members.count_documents({"status": "active"})
+    total_players = await db.players.count_documents({"club_id": club_id})
+    active_players = await db.players.count_documents({"status": "active", "club_id": club_id})
+    total_members = await db.members.count_documents({"club_id": club_id})
+    active_members = await db.members.count_documents({"status": "active", "club_id": club_id})
 
     # Payments summary
-    payments = await db.payments.find({}, {"_id": 0}).to_list(5000)
+    payments = await db.payments.find({"club_id": club_id}, {"_id": 0}).to_list(5000)
     total_collected = sum(p["amount"] for p in payments if p.get("status") == "paid")
     total_pending = sum(p["amount"] for p in payments if p.get("status") == "pending")
     overdue_count = 0
@@ -2072,7 +2209,7 @@ async def reports_summary(request: Request):
             overdue_count += 1
 
     # Sales by fee
-    fees = await db.fees.find({}, {"_id": 0}).to_list(100)
+    fees = await db.fees.find({"club_id": club_id}, {"_id": 0}).to_list(100)
     fee_map = {f["id"]: f for f in fees}
     sales_by_fee = {}
     for p in payments:
@@ -2095,9 +2232,9 @@ async def reports_summary(request: Request):
             sales_by_fee[fid]["total_pending"] += p["amount"]
 
     # Players by team
-    teams = await db.teams.find({}, {"_id": 0}).to_list(100)
+    teams = await db.teams.find({"club_id": club_id}, {"_id": 0}).to_list(100)
     team_map = {t["id"]: t["name"] for t in teams}
-    players = await db.players.find({}, {"_id": 0}).to_list(5000)
+    players = await db.players.find({"club_id": club_id}, {"_id": 0}).to_list(5000)
     players_by_team = {}
     for pl in players:
         tid = pl.get("team_id", "")
@@ -2136,8 +2273,8 @@ async def reports_players_detail(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ):
-    await get_current_user(request)
-    query = {}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
     if team_id:
         query["team_id"] = team_id
     if status:
@@ -2149,9 +2286,9 @@ async def reports_players_detail(
         if date_to:
             query["created_at"]["$lte"] = date_to + "T23:59:59"
     players = await db.players.find(query, {"_id": 0}).sort("created_at", -1).to_list(5000)
-    teams = {t["id"]: t for t in await db.teams.find({}, {"_id": 0}).to_list(100)}
-    fees = {f["id"]: f for f in await db.fees.find({}, {"_id": 0}).to_list(100)}
-    payments_list = await db.payments.find({"person_type": "player"}, {"_id": 0}).to_list(5000)
+    teams = {t["id"]: t for t in await db.teams.find({"club_id": club_id}, {"_id": 0}).to_list(100)}
+    fees = {f["id"]: f for f in await db.fees.find({"club_id": club_id}, {"_id": 0}).to_list(100)}
+    payments_list = await db.payments.find({"person_type": "player", "club_id": club_id}, {"_id": 0}).to_list(5000)
     pay_by_player = {}
     for p in payments_list:
         pay_by_player.setdefault(p["person_id"], []).append(p)
@@ -2193,8 +2330,8 @@ async def reports_payments_detail(
     date_to: Optional[str] = None,
     team_id: Optional[str] = None,
 ):
-    await get_current_user(request)
-    query = {}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
     if person_type:
         query["person_type"] = person_type
     if status:
@@ -2209,10 +2346,10 @@ async def reports_payments_detail(
             query["created_at"]["$lte"] = date_to + "T23:59:59"
     payments = await db.payments.find(query, {"_id": 0}).sort("created_at", -1).to_list(5000)
 
-    teams = {t["id"]: t["name"] for t in await db.teams.find({}, {"_id": 0}).to_list(100)}
-    fees = {f["id"]: f["name"] for f in await db.fees.find({}, {"_id": 0}).to_list(100)}
-    players = {p["id"]: p for p in await db.players.find({}, {"_id": 0}).to_list(5000)}
-    members = {m["id"]: m for m in await db.members.find({}, {"_id": 0}).to_list(5000)}
+    teams = {t["id"]: t["name"] for t in await db.teams.find({"club_id": club_id}, {"_id": 0}).to_list(100)}
+    fees = {f["id"]: f["name"] for f in await db.fees.find({"club_id": club_id}, {"_id": 0}).to_list(100)}
+    players = {p["id"]: p for p in await db.players.find({"club_id": club_id}, {"_id": 0}).to_list(5000)}
+    members = {m["id"]: m for m in await db.members.find({"club_id": club_id}, {"_id": 0}).to_list(5000)}
 
     result = []
     for pay in payments:
@@ -2244,30 +2381,31 @@ async def reports_payments_detail(
 # ─── FACILITIES ──────────────────────────────────────────────────────────────
 @api_router.get("/facilities")
 async def get_facilities(request: Request):
-    await get_current_user(request)
-    return await db.facilities.find({}, {"_id": 0}).sort("name", 1).to_list(200)
+    club_id = await get_club_id_from_request(request)
+    return await db.facilities.find({"club_id": club_id}, {"_id": 0}).sort("name", 1).to_list(200)
 
 @api_router.post("/facilities")
 async def create_facility(data: FacilityCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.facilities.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.put("/facilities/{fac_id}")
 async def update_facility(fac_id: str, data: FacilityUpdate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     upd = {k: v for k, v in data.model_dump().items() if v is not None}
     if upd:
-        await db.facilities.update_one({"id": fac_id}, {"$set": upd})
-    return await db.facilities.find_one({"id": fac_id}, {"_id": 0})
+        await db.facilities.update_one({"id": fac_id, "club_id": club_id}, {"$set": upd})
+    return await db.facilities.find_one({"id": fac_id, "club_id": club_id}, {"_id": 0})
 
 @api_router.delete("/facilities/{fac_id}")
 async def delete_facility(fac_id: str, request: Request):
-    await get_current_user(request)
-    await db.facilities.delete_one({"id": fac_id})
+    club_id = await get_club_id_from_request(request)
+    await db.facilities.delete_one({"id": fac_id, "club_id": club_id})
     return {"message": "Instalación eliminada"}
 
 
@@ -2282,8 +2420,8 @@ async def get_sales(
     date_to: Optional[str] = None,
     person_id: Optional[str] = None,
 ):
-    await get_current_user(request)
-    query: dict = {}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
     if status:
         query["status"] = status
     if person_type:
@@ -2300,9 +2438,10 @@ async def get_sales(
 
 @api_router.post("/sales")
 async def create_sale(data: SaleCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     doc["paid_at"] = ""
     await db.sales.insert_one(doc)
@@ -2310,33 +2449,33 @@ async def create_sale(data: SaleCreate, request: Request):
 
 @api_router.put("/sales/{sale_id}")
 async def update_sale(sale_id: str, data: SaleUpdate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     upd = {k: v for k, v in data.model_dump().items() if v is not None}
     if upd.get("status") == "paid" and not upd.get("paid_at"):
         upd["paid_at"] = datetime.now(timezone.utc).isoformat()
     if upd:
-        await db.sales.update_one({"id": sale_id}, {"$set": upd})
-    return await db.sales.find_one({"id": sale_id}, {"_id": 0})
+        await db.sales.update_one({"id": sale_id, "club_id": club_id}, {"$set": upd})
+    return await db.sales.find_one({"id": sale_id, "club_id": club_id}, {"_id": 0})
 
 @api_router.delete("/sales/{sale_id}")
 async def delete_sale(sale_id: str, request: Request):
-    await get_current_user(request)
-    await db.sales.delete_one({"id": sale_id})
+    club_id = await get_club_id_from_request(request)
+    await db.sales.delete_one({"id": sale_id, "club_id": club_id})
     return {"message": "Venta eliminada"}
 
 @api_router.post("/sales/bulk")
 async def bulk_create_sales(data: BulkSaleRequest, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     now = datetime.now(timezone.utc).isoformat()
     docs = []
     for pid in data.player_ids:
-        docs.append({"id": str(uuid.uuid4()), "person_id": pid, "person_type": "player",
+        docs.append({"id": str(uuid.uuid4()), "club_id": club_id, "person_id": pid, "person_type": "player",
                      "product_id": data.product_id, "fee_id": data.fee_id,
                      "concept": data.concept, "amount": data.amount, "currency": "eur",
                      "payment_method": data.payment_method, "status": "pending",
                      "due_date": data.due_date, "notes": data.notes, "created_at": now, "paid_at": ""})
     for mid in data.member_ids:
-        docs.append({"id": str(uuid.uuid4()), "person_id": mid, "person_type": "member",
+        docs.append({"id": str(uuid.uuid4()), "club_id": club_id, "person_id": mid, "person_type": "member",
                      "product_id": data.product_id, "fee_id": data.fee_id,
                      "concept": data.concept, "amount": data.amount, "currency": "eur",
                      "payment_method": data.payment_method, "status": "pending",
@@ -2351,8 +2490,8 @@ async def sales_dashboard(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ):
-    await get_current_user(request)
-    sales = await db.sales.find({}, {"_id": 0}).to_list(50000)
+    club_id = await get_club_id_from_request(request)
+    sales = await db.sales.find({"club_id": club_id}, {"_id": 0}).to_list(50000)
     if date_from or date_to:
         sales = [s for s in sales if (not date_from or s.get("created_at", "")[:10] >= date_from) and
                  (not date_to or s.get("created_at", "")[:10] <= date_to)]
@@ -2386,14 +2525,14 @@ async def sales_dashboard(
 @api_router.get("/sales/export-sepa")
 async def export_sales_sepa_list(request: Request, status: Optional[str] = "pending"):
     """Returns sales with payment_method=sepa for SEPA XML generation."""
-    await get_current_user(request)
-    query: dict = {"payment_method": "sepa"}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"payment_method": "sepa", "club_id": club_id}
     if status:
         query["status"] = status
     sales = await db.sales.find(query, {"_id": 0}).to_list(10000)
-    players = {p["id"]: p for p in await db.players.find({}, {"_id": 0}).to_list(5000)}
-    members = {m["id"]: m for m in await db.members.find({}, {"_id": 0}).to_list(5000)}
-    mandates = {m["person_id"]: m for m in await db.sepa_mandates.find({"status": "active"}, {"_id": 0}).to_list(5000)}
+    players = {p["id"]: p for p in await db.players.find({"club_id": club_id}, {"_id": 0}).to_list(5000)}
+    members = {m["id"]: m for m in await db.members.find({"club_id": club_id}, {"_id": 0}).to_list(5000)}
+    mandates = {m["person_id"]: m for m in await db.sepa_mandates.find({"status": "active", "club_id": club_id}, {"_id": 0}).to_list(5000)}
     result = []
     for s in sales:
         pid = s.get("person_id", "")
@@ -2415,8 +2554,8 @@ async def export_sales_excel(
     date_to: Optional[str] = None,
     payment_method: Optional[str] = None,
 ):
-    await get_current_user(request)
-    query: dict = {}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
     if status:
         query["status"] = status
     if payment_method:
@@ -2425,8 +2564,8 @@ async def export_sales_excel(
     if date_from or date_to:
         sales = [s for s in sales if (not date_from or s.get("created_at","")[:10] >= date_from) and
                  (not date_to or s.get("created_at","")[:10] <= date_to)]
-    players = {p["id"]: p for p in await db.players.find({}, {"_id": 0}).to_list(5000)}
-    members = {m["id"]: m for m in await db.members.find({}, {"_id": 0}).to_list(5000)}
+    players = {p["id"]: p for p in await db.players.find({"club_id": club_id}, {"_id": 0}).to_list(5000)}
+    members = {m["id"]: m for m in await db.members.find({"club_id": club_id}, {"_id": 0}).to_list(5000)}
     headers = ["Fecha","Apellidos","Nombre","Tipo","Concepto","Importe €","Estado","Método pago","Vencimiento","Pagado el"]
     rows = []
     for s in sales:
@@ -2450,8 +2589,8 @@ async def get_schedule_events(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ):
-    await get_current_user(request)
-    query: dict = {}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
     if team_id:
         query["team_id"] = team_id
     if event_type:
@@ -2465,9 +2604,10 @@ async def get_schedule_events(
 
 @api_router.post("/schedule/events")
 async def create_schedule_event(data: ScheduleEventCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.schedule_events.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
@@ -2479,8 +2619,8 @@ async def generate_week_from_template(
     week_start: str,  # YYYY-MM-DD (Monday)
 ):
     """Generate schedule events for a full week from a template."""
-    await get_current_user(request)
-    tmpl = await db.schedule_templates.find_one({"id": template_id})
+    club_id = await get_club_id_from_request(request)
+    tmpl = await db.schedule_templates.find_one({"id": template_id, "club_id": club_id})
     if not tmpl:
         raise HTTPException(status_code=404, detail="Template no encontrado")
     day_map = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}
@@ -2494,6 +2634,7 @@ async def generate_week_from_template(
         d = event_date + timedelta(weeks=w)
         doc = {
             "id": str(uuid.uuid4()),
+            "club_id": club_id,
             "title": tmpl.get("name", "Entrenamiento"),
             "team_id": tmpl.get("team_id", ""),
             "facility_id": tmpl.get("facility_id", ""),
@@ -2511,14 +2652,15 @@ async def generate_week_from_template(
 
 @api_router.get("/schedule/templates")
 async def get_schedule_templates(request: Request):
-    await get_current_user(request)
-    return await db.schedule_templates.find({}, {"_id": 0}).sort("name", 1).to_list(200)
+    club_id = await get_club_id_from_request(request)
+    return await db.schedule_templates.find({"club_id": club_id}, {"_id": 0}).sort("name", 1).to_list(200)
 
 @api_router.post("/schedule/templates")
 async def create_schedule_template(data: ScheduleTemplateCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.schedule_templates.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
@@ -2526,8 +2668,8 @@ async def create_schedule_template(data: ScheduleTemplateCreate, request: Reques
 @api_router.post("/schedule/templates/{tmpl_id}/generate-week")
 async def generate_week_from_template_v2(tmpl_id: str, body: dict, request: Request):
     """Generate schedule events for a full week from a multi-event template."""
-    await get_current_user(request)
-    tmpl = await db.schedule_templates.find_one({"id": tmpl_id}, {"_id": 0})
+    club_id = await get_club_id_from_request(request)
+    tmpl = await db.schedule_templates.find_one({"id": tmpl_id, "club_id": club_id}, {"_id": 0})
     if not tmpl:
         raise HTTPException(status_code=404, detail="Plantilla no encontrada")
     week_start_str = body.get("week_start", "")
@@ -2554,6 +2696,7 @@ async def generate_week_from_template_v2(tmpl_id: str, body: dict, request: Requ
         event_date = base + timedelta(days=int(dow))
         doc = {
             "id": str(uuid.uuid4()),
+            "club_id": club_id,
             "type": ev.get("type", "entrenamiento"),
             "title": ev.get("title") or ev.get("type", "entrenamiento"),
             "team_id": ev.get("team_id", ""),
@@ -2568,16 +2711,32 @@ async def generate_week_from_template_v2(tmpl_id: str, body: dict, request: Requ
         created += 1
     return {"created": created}
 
+@api_router.put("/schedule/events/{event_id}")
+async def update_schedule_event(event_id: str, data: dict, request: Request):
+    club_id = await get_club_id_from_request(request)
+    data.pop("id", None); data.pop("_id", None); data.pop("created_at", None)
+    await db.schedule_events.update_one({"id": event_id, "club_id": club_id}, {"$set": data})
+    updated = await db.schedule_events.find_one({"id": event_id, "club_id": club_id}, {"_id": 0})
+    return updated
+
 @api_router.delete("/schedule/events/{event_id}")
 async def delete_schedule_event(event_id: str, request: Request):
-    await get_current_user(request)
-    await db.schedule_events.delete_one({"id": event_id})
+    club_id = await get_club_id_from_request(request)
+    await db.schedule_events.delete_one({"id": event_id, "club_id": club_id})
     return {"message": "Evento eliminado"}
+
+@api_router.put("/schedule/templates/{tmpl_id}")
+async def update_schedule_template(tmpl_id: str, data: dict, request: Request):
+    club_id = await get_club_id_from_request(request)
+    data.pop("id", None); data.pop("_id", None); data.pop("created_at", None)
+    await db.schedule_templates.update_one({"id": tmpl_id, "club_id": club_id}, {"$set": data})
+    updated = await db.schedule_templates.find_one({"id": tmpl_id, "club_id": club_id}, {"_id": 0})
+    return updated
 
 @api_router.delete("/schedule/templates/{tmpl_id}")
 async def delete_schedule_template(tmpl_id: str, request: Request):
-    await get_current_user(request)
-    await db.schedule_templates.delete_one({"id": tmpl_id})
+    club_id = await get_club_id_from_request(request)
+    await db.schedule_templates.delete_one({"id": tmpl_id, "club_id": club_id})
     return {"message": "Plantilla eliminada"}
 
 
@@ -2588,22 +2747,22 @@ async def dashboard_stats(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     now_str = datetime.now(timezone.utc).isoformat()
     if not date_from:
         date_from = datetime.now(timezone.utc).replace(day=1).strftime("%Y-%m-%d")
     if not date_to:
         date_to = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    all_sales = await db.sales.find({}, {"_id": 0}).to_list(50000)
+    all_sales = await db.sales.find({"club_id": club_id}, {"_id": 0}).to_list(50000)
     period_sales = [s for s in all_sales if date_from <= s.get("created_at","")[:10] <= date_to]
     paid_period = [s for s in period_sales if s.get("status") == "paid"]
     pending_all = [s for s in all_sales if s.get("status") == "pending"]
     overdue_all = [s for s in pending_all if s.get("due_date","") and s.get("due_date","") < now_str[:10]]
 
-    players = await db.players.find({}, {"_id": 0}).to_list(5000)
-    members = await db.members.find({}, {"_id": 0}).to_list(5000)
-    teams = await db.teams.find({}, {"_id": 0}).to_list(200)
+    players = await db.players.find({"club_id": club_id}, {"_id": 0}).to_list(5000)
+    members = await db.members.find({"club_id": club_id}, {"_id": 0}).to_list(5000)
+    teams = await db.teams.find({"club_id": club_id}, {"_id": 0}).to_list(200)
 
     # Monthly revenue last 6 months
     monthly: dict = {}
@@ -2642,32 +2801,35 @@ async def dashboard_stats(
 # ─── PRODUCTS ──────────────────────────────────────────────────────────────────
 @api_router.get("/products")
 async def get_products(request: Request, active_only: bool = False):
-    await get_current_user(request)
-    query = {"active": True} if active_only else {}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
+    if active_only:
+        query["active"] = True
     items = await db.products.find(query, {"_id": 0}).sort("name", 1).to_list(500)
     return items
 
 @api_router.post("/products")
 async def create_product(data: ProductCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.products.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.put("/products/{product_id}")
 async def update_product(product_id: str, data: ProductUpdate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if update_data:
-        await db.products.update_one({"id": product_id}, {"$set": update_data})
-    return await db.products.find_one({"id": product_id}, {"_id": 0})
+        await db.products.update_one({"id": product_id, "club_id": club_id}, {"$set": update_data})
+    return await db.products.find_one({"id": product_id, "club_id": club_id}, {"_id": 0})
 
 @api_router.delete("/products/{product_id}")
 async def delete_product(product_id: str, request: Request):
-    await get_current_user(request)
-    await db.products.delete_one({"id": product_id})
+    club_id = await get_club_id_from_request(request)
+    await db.products.delete_one({"id": product_id, "club_id": club_id})
     return {"message": "Producto eliminado"}
 
 
@@ -2677,7 +2839,8 @@ async def get_admin_users(request: Request):
     user = await get_current_user(request)
     if user.get("role") not in ("admin", "director"):
         raise HTTPException(status_code=403, detail="Sin permisos")
-    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(200)
+    club_id = user.get("club_id", "racing_sangabriel")
+    users = await db.users.find({"club_id": club_id}, {"_id": 0, "password_hash": 0}).to_list(200)
     for u in users:
         if "_id" in u:
             u["_id"] = str(u["_id"])
@@ -2688,11 +2851,13 @@ async def create_admin_user(data: AdminUserCreate, request: Request):
     user = await get_current_user(request)
     if user.get("role") not in ("admin", "director"):
         raise HTTPException(status_code=403, detail="Sin permisos")
-    existing = await db.users.find_one({"email": data.email.lower()})
+    club_id = user.get("club_id", "racing_sangabriel")
+    existing = await db.users.find_one({"email": data.email.lower(), "club_id": club_id})
     if existing:
         raise HTTPException(status_code=400, detail="Email ya en uso")
     doc = {
         "id": str(uuid.uuid4()),
+        "club_id": club_id,
         "email": data.email.lower(),
         "name": data.name,
         "password_hash": hash_password(data.password),
@@ -2710,12 +2875,13 @@ async def update_admin_user(user_id: str, data: AdminUserUpdate, request: Reques
     user = await get_current_user(request)
     if user.get("role") not in ("admin", "director"):
         raise HTTPException(status_code=403, detail="Sin permisos")
+    club_id = user.get("club_id", "racing_sangabriel")
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if "password" in update_data:
         update_data["password_hash"] = hash_password(update_data.pop("password"))
     if update_data:
-        await db.users.update_one({"id": user_id}, {"$set": update_data})
-    updated = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+        await db.users.update_one({"id": user_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.users.find_one({"id": user_id, "club_id": club_id}, {"_id": 0, "password_hash": 0})
     return updated
 
 @api_router.delete("/admin/users/{user_id}")
@@ -2723,9 +2889,10 @@ async def delete_admin_user(user_id: str, request: Request):
     user = await get_current_user(request)
     if user.get("role") not in ("admin", "director"):
         raise HTTPException(status_code=403, detail="Sin permisos")
+    club_id = user.get("club_id", "racing_sangabriel")
     if user.get("id") == user_id:
         raise HTTPException(status_code=400, detail="No puedes eliminar tu propio usuario")
-    await db.users.delete_one({"id": user_id})
+    await db.users.delete_one({"id": user_id, "club_id": club_id})
     return {"message": "Usuario eliminado"}
 
 
@@ -2764,14 +2931,14 @@ async def export_players(
     has_siblings: Optional[bool] = None,
     is_minor: Optional[bool] = None,
 ):
-    await get_current_user(request)
-    query = {}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
     if team_id:
         query["team_id"] = team_id
     if status:
         query["status"] = status
     players = await db.players.find(query, {"_id": 0}).sort("surname", 1).to_list(5000)
-    teams = {t["id"]: t["name"] for t in await db.teams.find({}, {"_id": 0}).to_list(200)}
+    teams = {t["id"]: t["name"] for t in await db.teams.find({"club_id": club_id}, {"_id": 0}).to_list(200)}
 
     # Detect siblings: group by family_id
     family_counts: dict = {}
@@ -2844,8 +3011,8 @@ async def export_members(
     member_type: Optional[str] = None,
     status: Optional[str] = None,
 ):
-    await get_current_user(request)
-    query = {}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
     if member_type:
         query["member_type"] = member_type
     if status:
@@ -2883,17 +3050,17 @@ async def export_payments(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ):
-    await get_current_user(request)
-    query = {}
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
     if status:
         query["status"] = status
     if person_type:
         query["person_type"] = person_type
     payments = await db.payments.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
-    players = {p["id"]: p for p in await db.players.find({}, {"_id": 0}).to_list(5000)}
-    members = {m["id"]: m for m in await db.members.find({}, {"_id": 0}).to_list(5000)}
-    teams = {t["id"]: t["name"] for t in await db.teams.find({}, {"_id": 0}).to_list(200)}
-    fees = {f["id"]: f["name"] for f in await db.fees.find({}, {"_id": 0}).to_list(200)}
+    players = {p["id"]: p for p in await db.players.find({"club_id": club_id}, {"_id": 0}).to_list(5000)}
+    members = {m["id"]: m for m in await db.members.find({"club_id": club_id}, {"_id": 0}).to_list(5000)}
+    teams = {t["id"]: t["name"] for t in await db.teams.find({"club_id": club_id}, {"_id": 0}).to_list(200)}
+    fees = {f["id"]: f["name"] for f in await db.fees.find({"club_id": club_id}, {"_id": 0}).to_list(200)}
     headers = [
         "Fecha", "Apellidos", "Nombre", "Tipo Persona", "Equipo",
         "Concepto", "Tarifa", "Importe (€)", "Estado",
@@ -2934,10 +3101,10 @@ async def export_payments(
 
 @api_router.get("/export/guardians")
 async def export_guardians(request: Request):
-    await get_current_user(request)
-    guardians = await db.guardians.find({}, {"_id": 0}).sort("surname", 1).to_list(5000)
+    club_id = await get_club_id_from_request(request)
+    guardians = await db.guardians.find({"club_id": club_id}, {"_id": 0}).sort("surname", 1).to_list(5000)
     players = {p["id"]: f"{p.get('name','')} {p.get('surname','')}".strip()
-               for p in await db.players.find({}, {"_id": 0}).to_list(5000)}
+               for p in await db.players.find({"club_id": club_id}, {"_id": 0}).to_list(5000)}
     headers = [
         "Apellidos", "Nombre", "Relación", "NIF/NIE",
         "Teléfono", "Email", "Dirección", "Ciudad",
@@ -2961,37 +3128,38 @@ async def export_guardians(request: Request):
 # ─── COMMUNICATIONS LISTS ─────────────────────────────────────────────────────
 @api_router.get("/communications/lists")
 async def get_comm_lists(request: Request):
-    await get_current_user(request)
-    lists = await db.comm_lists.find({}, {"_id": 0}).sort("name", 1).to_list(500)
+    club_id = await get_club_id_from_request(request)
+    lists = await db.comm_lists.find({"club_id": club_id}, {"_id": 0}).sort("name", 1).to_list(500)
     return lists
 
 @api_router.post("/communications/lists")
 async def create_comm_list(data: CommListCreate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
     doc["created_at"] = datetime.now(timezone.utc).isoformat()
     await db.comm_lists.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.put("/communications/lists/{list_id}")
 async def update_comm_list(list_id: str, data: CommListUpdate, request: Request):
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if update_data:
-        await db.comm_lists.update_one({"id": list_id}, {"$set": update_data})
-    return await db.comm_lists.find_one({"id": list_id}, {"_id": 0})
+        await db.comm_lists.update_one({"id": list_id, "club_id": club_id}, {"$set": update_data})
+    return await db.comm_lists.find_one({"id": list_id, "club_id": club_id}, {"_id": 0})
 
 @api_router.delete("/communications/lists/{list_id}")
 async def delete_comm_list(list_id: str, request: Request):
-    await get_current_user(request)
-    await db.comm_lists.delete_one({"id": list_id})
+    club_id = await get_club_id_from_request(request)
+    await db.comm_lists.delete_one({"id": list_id, "club_id": club_id})
     return {"message": "Lista eliminada"}
 
 
-async def _resolve_list_emails(list_id: str) -> list:
+async def _resolve_list_emails(list_id: str, club_id: str = "racing_sangabriel") -> list:
     """Resolve a comm list to a deduplicated list of email addresses."""
-    lst = await db.comm_lists.find_one({"id": list_id})
+    lst = await db.comm_lists.find_one({"id": list_id, "club_id": club_id})
     if not lst:
         return []
     ft = lst.get("filter_type", "manual")
@@ -3000,31 +3168,31 @@ async def _resolve_list_emails(list_id: str) -> list:
         rtype = lst.get("recipient_type", "player")
         for rid in lst.get("recipient_ids", []):
             coll = db.players if rtype == "player" else db.members if rtype == "member" else db.guardians
-            doc = await coll.find_one({"id": rid})
+            doc = await coll.find_one({"id": rid, "club_id": club_id})
             if doc and doc.get("email"):
                 emails.add(doc["email"])
     elif ft == "all_players":
-        async for p in db.players.find({"status": "active"}, {"email": 1}):
+        async for p in db.players.find({"status": "active", "club_id": club_id}, {"email": 1}):
             if p.get("email"):
                 emails.add(p["email"])
     elif ft == "all_members":
-        async for m in db.members.find({"status": "active"}, {"email": 1}):
+        async for m in db.members.find({"status": "active", "club_id": club_id}, {"email": 1}):
             if m.get("email"):
                 emails.add(m["email"])
     elif ft == "all_guardians":
-        async for g in db.guardians.find({}, {"email": 1}):
+        async for g in db.guardians.find({"club_id": club_id}, {"email": 1}):
             if g.get("email"):
                 emails.add(g["email"])
     elif ft == "team":
         team_id_val = lst.get("filter_value", "")
-        async for p in db.players.find({"team_id": team_id_val, "status": "active"}, {"email": 1}):
+        async for p in db.players.find({"team_id": team_id_val, "status": "active", "club_id": club_id}, {"email": 1}):
             if p.get("email"):
                 emails.add(p["email"])
     elif ft == "category":
         cat = lst.get("filter_value", "")
-        teams = await db.teams.find({"category": cat}, {"id": 1}).to_list(50)
+        teams = await db.teams.find({"category": cat, "club_id": club_id}, {"id": 1}).to_list(50)
         tids = [t["id"] for t in teams]
-        async for p in db.players.find({"team_id": {"$in": tids}, "status": "active"}, {"email": 1}):
+        async for p in db.players.find({"team_id": {"$in": tids}, "status": "active", "club_id": club_id}, {"email": 1}):
             if p.get("email"):
                 emails.add(p["email"])
     return list(emails)
@@ -3033,14 +3201,15 @@ async def _resolve_list_emails(list_id: str) -> list:
 @api_router.post("/communications/send")
 async def send_communication(data: CommSendRequest, request: Request):
     user = await get_current_user(request)
-    settings = await db.settings.find_one({}, {"_id": 0}) or {}
+    club_id = user.get("club_id", "racing_sangabriel")
+    settings = await db.settings.find_one({"club_id": club_id}, {"_id": 0}) or {}
     if not settings.get("smtp_enabled"):
         raise HTTPException(status_code=400, detail="SMTP no configurado. Actívalo en Ajustes → Email SMTP.")
 
     # Resolve recipients
     all_emails: list = list(data.recipient_emails or [])
     if data.list_id:
-        all_emails += await _resolve_list_emails(data.list_id)
+        all_emails += await _resolve_list_emails(data.list_id, club_id)
     all_emails = list(set(e.strip() for e in all_emails if e.strip()))
     if not all_emails:
         raise HTTPException(status_code=400, detail="No hay destinatarios con email válido")
@@ -3079,6 +3248,7 @@ async def send_communication(data: CommSendRequest, request: Request):
     # Save to history
     history_doc = {
         "id": str(uuid.uuid4()),
+        "club_id": club_id,
         "subject": data.subject,
         "body_html": data.body_html,
         "list_id": data.list_id or "",
@@ -3102,13 +3272,14 @@ async def send_communication_with_attachments(
     attachments: list[UploadFile] = File(default=[]),
 ):
     user = await get_current_user(request)
-    settings = await db.settings.find_one({}, {"_id": 0}) or {}
+    club_id = user.get("club_id", "racing_sangabriel")
+    settings = await db.settings.find_one({"club_id": club_id}, {"_id": 0}) or {}
     if not settings.get("smtp_enabled"):
         raise HTTPException(status_code=400, detail="SMTP no configurado. Actívalo en Ajustes → Email SMTP.")
 
     all_emails: list = list(recipient_emails or [])
     if list_id:
-        all_emails += await _resolve_list_emails(list_id)
+        all_emails += await _resolve_list_emails(list_id, club_id)
     all_emails = list(set(e.strip() for e in all_emails if e.strip()))
     if not all_emails:
         raise HTTPException(status_code=400, detail="No hay destinatarios con email válido")
@@ -3157,6 +3328,7 @@ async def send_communication_with_attachments(
 
     history_doc = {
         "id": str(uuid.uuid4()),
+        "club_id": club_id,
         "subject": subject,
         "body_html": body_html,
         "list_id": list_id or "",
@@ -3173,15 +3345,15 @@ async def send_communication_with_attachments(
 
 @api_router.get("/communications/history")
 async def get_comm_history(request: Request, limit: int = 50):
-    await get_current_user(request)
-    history = await db.comm_history.find({}, {"_id": 0}).sort("sent_at", -1).to_list(limit)
+    club_id = await get_club_id_from_request(request)
+    history = await db.comm_history.find({"club_id": club_id}, {"_id": 0}).sort("sent_at", -1).to_list(limit)
     return history
 
 @api_router.get("/communications/preview-list/{list_id}")
 async def preview_comm_list(list_id: str, request: Request):
     """Returns how many emails a list would resolve to."""
-    await get_current_user(request)
-    emails = await _resolve_list_emails(list_id)
+    club_id = await get_club_id_from_request(request)
+    emails = await _resolve_list_emails(list_id, club_id)
     return {"count": len(emails), "emails": emails[:20]}  # preview max 20
 
 
@@ -3243,6 +3415,7 @@ async def seed_admin():
             "password_hash": hashed,
             "name": "Administrador",
             "role": "admin",
+            "club_id": "racing_sangabriel",
             "created_at": datetime.now(timezone.utc).isoformat()
         })
         logger.info(f"Admin seeded: {admin_email}")
@@ -3251,91 +3424,92 @@ async def seed_admin():
         logger.info("Admin password updated")
 
 async def seed_demo_data():
+    _SEED_CLUB = "racing_sangabriel"
     # Seed teams if empty
-    count = await db.teams.count_documents({})
+    count = await db.teams.count_documents({"club_id": _SEED_CLUB})
     if count == 0:
         teams = [
-            {"id": str(uuid.uuid4()), "name": "Alevin A", "category": "Alevin", "coach": "", "image_url": "", "description": "Equipo alevin categoria A", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Alevin B", "category": "Alevin", "coach": "", "image_url": "", "description": "Equipo alevin categoria B", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Benjamin A", "category": "Benjamin", "coach": "", "image_url": "", "description": "Equipo benjamin categoria A", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Benjamin B", "category": "Benjamin", "coach": "", "image_url": "", "description": "Equipo benjamin categoria B", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Cadete", "category": "Cadete", "coach": "", "image_url": "", "description": "Equipo cadete", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Escuela Iniciacion", "category": "Escuela", "coach": "", "image_url": "", "description": "Escuela de iniciacion al futbol", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Futbol Femenino", "category": "Femenino", "coach": "", "image_url": "", "description": "4 equipos de futbol femenino", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Futbol Sala Senior", "category": "Futbol Sala", "coach": "", "image_url": "", "description": "Equipo de futbol sala senior", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Infantil A", "category": "Infantil", "coach": "", "image_url": "", "description": "Equipo infantil categoria A", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Infantil B", "category": "Infantil", "coach": "", "image_url": "", "description": "Equipo infantil categoria B", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Juvenil A", "category": "Juvenil", "coach": "", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "description": "Equipo juvenil categoria A", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Juvenil B", "category": "Juvenil", "coach": "", "image_url": "", "description": "Equipo juvenil categoria B", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Prebenjamin", "category": "Prebenjamin", "coach": "", "image_url": "", "description": "Equipo prebenjamin", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "name": "Senior", "category": "Senior", "coach": "", "image_url": "", "description": "Equipo senior", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Alevin A", "category": "Alevin", "coach": "", "image_url": "", "description": "Equipo alevin categoria A", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Alevin B", "category": "Alevin", "coach": "", "image_url": "", "description": "Equipo alevin categoria B", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Benjamin A", "category": "Benjamin", "coach": "", "image_url": "", "description": "Equipo benjamin categoria A", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Benjamin B", "category": "Benjamin", "coach": "", "image_url": "", "description": "Equipo benjamin categoria B", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Cadete", "category": "Cadete", "coach": "", "image_url": "", "description": "Equipo cadete", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Escuela Iniciacion", "category": "Escuela", "coach": "", "image_url": "", "description": "Escuela de iniciacion al futbol", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Futbol Femenino", "category": "Femenino", "coach": "", "image_url": "", "description": "4 equipos de futbol femenino", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Futbol Sala Senior", "category": "Futbol Sala", "coach": "", "image_url": "", "description": "Equipo de futbol sala senior", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Infantil A", "category": "Infantil", "coach": "", "image_url": "", "description": "Equipo infantil categoria A", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Infantil B", "category": "Infantil", "coach": "", "image_url": "", "description": "Equipo infantil categoria B", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Juvenil A", "category": "Juvenil", "coach": "", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "description": "Equipo juvenil categoria A", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Juvenil B", "category": "Juvenil", "coach": "", "image_url": "", "description": "Equipo juvenil categoria B", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Prebenjamin", "category": "Prebenjamin", "coach": "", "image_url": "", "description": "Equipo prebenjamin", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Senior", "category": "Senior", "coach": "", "image_url": "", "description": "Equipo senior", "created_at": datetime.now(timezone.utc).isoformat()},
         ]
         await db.teams.insert_many(teams)
 
     # Seed matches if empty
-    count = await db.matches.count_documents({})
+    count = await db.matches.count_documents({"club_id": _SEED_CLUB})
     if count == 0:
         matches = [
-            {"id": str(uuid.uuid4()), "home_team": "Racing San Gabriel", "away_team": "CD Alicante", "date": "2025-02-15", "time": "10:30", "location": "Campo Municipal San Gabriel", "category": "Juvenil", "result": "2-1", "status": "played", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "home_team": "Racing San Gabriel", "away_team": "CF Intercity B", "date": "2025-02-22", "time": "12:00", "location": "Campo Municipal San Gabriel", "category": "Juvenil", "result": "", "status": "upcoming", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "home_team": "Hércules CF C", "away_team": "Racing San Gabriel", "date": "2025-03-01", "time": "11:00", "location": "Estadio Rico Pérez", "category": "Cadete", "result": "", "status": "upcoming", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "home_team": "Racing San Gabriel", "away_team": "CD Alicante", "date": "2025-02-15", "time": "10:30", "location": "Campo Municipal San Gabriel", "category": "Juvenil", "result": "2-1", "status": "played", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "home_team": "Racing San Gabriel", "away_team": "CF Intercity B", "date": "2025-02-22", "time": "12:00", "location": "Campo Municipal San Gabriel", "category": "Juvenil", "result": "", "status": "upcoming", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "home_team": "Hércules CF C", "away_team": "Racing San Gabriel", "date": "2025-03-01", "time": "11:00", "location": "Estadio Rico Pérez", "category": "Cadete", "result": "", "status": "upcoming", "created_at": datetime.now(timezone.utc).isoformat()},
         ]
         await db.matches.insert_many(matches)
 
     # Seed news if empty
-    count = await db.news.count_documents({})
+    count = await db.news.count_documents({"club_id": _SEED_CLUB})
     if count == 0:
         news = [
-            {"id": str(uuid.uuid4()), "title": "Inscripciones abiertas temporada 2025/2026", "content": "Ya puedes inscribirte en cualquiera de nuestras categorias: desde Prebenjamin hasta Senior, pasando por Futbol Femenino y Futbol Sala. Contactanos en el 617 50 27 80 o en racingsangabrieladc@hotmail.com", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "source": "web", "category": "general", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "title": "Futbol femenino en auge", "content": "Nuestro club cuenta ya con 4 equipos de futbol femenino. Seguimos creciendo y apostando por el deporte femenino en Alicante. Si quieres unirte, contactanos.", "image_url": "https://images.unsplash.com/photo-1652190416554-c46af8a0ff50?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHw0fHxzb2NjZXIlMjBmb290YmFsbCUyMGZpZWxkJTIwdHJhaW5pbmd8ZW58MHx8fHwxNzc2MjY4MjIwfDA&ixlib=rb-4.1.0&q=85", "source": "web", "category": "general", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "title": "Nuevas actividades en la Sala Multiactividad", "content": "Ademas de futbol, en nuestra sede ofrecemos clases de Zumba, Fitness y Pilates en la Sala Multiactividad. Consulta horarios en la sede.", "image_url": "", "source": "web", "category": "eventos", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "title": "Inscripciones abiertas temporada 2025/2026", "content": "Ya puedes inscribirte en cualquiera de nuestras categorias: desde Prebenjamin hasta Senior, pasando por Futbol Femenino y Futbol Sala. Contactanos en el 617 50 27 80 o en racingsangabrieladc@hotmail.com", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "source": "web", "category": "general", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "title": "Futbol femenino en auge", "content": "Nuestro club cuenta ya con 4 equipos de futbol femenino. Seguimos creciendo y apostando por el deporte femenino en Alicante. Si quieres unirte, contactanos.", "image_url": "https://images.unsplash.com/photo-1652190416554-c46af8a0ff50?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHw0fHxzb2NjZXIlMjBmb290YmFsbCUyMGZpZWxkJTIwdHJhaW5pbmd8ZW58MHx8fHwxNzc2MjY4MjIwfDA&ixlib=rb-4.1.0&q=85", "source": "web", "category": "general", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "title": "Nuevas actividades en la Sala Multiactividad", "content": "Ademas de futbol, en nuestra sede ofrecemos clases de Zumba, Fitness y Pilates en la Sala Multiactividad. Consulta horarios en la sede.", "image_url": "", "source": "web", "category": "eventos", "created_at": datetime.now(timezone.utc).isoformat()},
         ]
         await db.news.insert_many(news)
 
     # Seed gallery if empty
-    count = await db.gallery.count_documents({})
+    count = await db.gallery.count_documents({"club_id": _SEED_CLUB})
     if count == 0:
         gallery = [
-            {"id": str(uuid.uuid4()), "title": "Equipo Juvenil A 2024/2025", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "description": "Foto oficial del equipo juvenil", "category": "equipos", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "title": "Partido en casa", "image_url": "https://images.pexels.com/photos/36213470/pexels-photo-36213470.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", "description": "Acción durante partido de liga", "category": "partidos", "created_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "title": "Estadio", "image_url": "https://static.prod-images.emergentagent.com/jobs/aa4aac70-2da7-49b9-b970-59a86d8b85ed/images/2e97b7f318b408c34d0d83e3483ffb1fb1d9ea389c42fb72c00f0fdd9219dad4.png", "description": "Vista del estadio", "category": "instalaciones", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "title": "Equipo Juvenil A 2024/2025", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "description": "Foto oficial del equipo juvenil", "category": "equipos", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "title": "Partido en casa", "image_url": "https://images.pexels.com/photos/36213470/pexels-photo-36213470.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", "description": "Acción durante partido de liga", "category": "partidos", "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "title": "Estadio", "image_url": "https://static.prod-images.emergentagent.com/jobs/aa4aac70-2da7-49b9-b970-59a86d8b85ed/images/2e97b7f318b408c34d0d83e3483ffb1fb1d9ea389c42fb72c00f0fdd9219dad4.png", "description": "Vista del estadio", "category": "instalaciones", "created_at": datetime.now(timezone.utc).isoformat()},
         ]
         await db.gallery.insert_many(gallery)
 
     # Seed sample social posts (to show how it looks before n8n is connected)
-    count = await db.social_posts.count_documents({})
+    count = await db.social_posts.count_documents({"club_id": _SEED_CLUB})
     if count == 0:
         social_posts = [
-            {"id": str(uuid.uuid4()), "source": "instagram", "content": "Gran entrenamiento de nuestro equipo Juvenil A esta tarde. Preparandose para el proximo partido de liga. Vamos Racing!", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "post_url": "https://www.instagram.com/racingsangabrieladc/", "author": "@racingsangabrieladc", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "source": "instagram", "content": "Inscripciones abiertas para la temporada 2025/2026. Todas las categorias disponibles. Contactanos!", "image_url": "https://images.unsplash.com/photo-1652190416554-c46af8a0ff50?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHw0fHxzb2NjZXIlMjBmb290YmFsbCUyMGZpZWxkJTIwdHJhaW5pbmd8ZW58MHx8fHwxNzc2MjY4MjIwfDA&ixlib=rb-4.1.0&q=85", "post_url": "https://www.instagram.com/racingsangabrieladc/", "author": "@racingsangabrieladc", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "source": "instagram", "content": "Nuestro futbol femenino sigue creciendo. Ya contamos con 4 equipos!", "image_url": "", "post_url": "https://www.instagram.com/racingsangabrieladc/", "author": "@racingsangabrieladc", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "source": "instagram", "content": "Clase de Zumba esta tarde en la Sala Multiactividad. Te apuntas?", "image_url": "", "post_url": "https://www.instagram.com/racingsangabrieladc/", "author": "@racingsangabrieladc", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "source": "facebook", "content": "Victoria del Alevin A este fin de semana. Gran trabajo de todo el equipo y del cuerpo tecnico. Seguimos sumando!", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "post_url": "https://www.facebook.com/RacingSanGabrielADC/", "author": "Racing San Gabriel ADC", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "source": "facebook", "content": "Horario de entrenamientos actualizado para esta semana. Consulta en la sede o llamanos al 617 50 27 80.", "image_url": "", "post_url": "https://www.facebook.com/RacingSanGabrielADC/", "author": "Racing San Gabriel ADC", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "source": "facebook", "content": "Nuevas equipaciones disponibles para todos los equipos. Pasate por la sede!", "image_url": "https://images.unsplash.com/photo-1652190416150-d501a60291b3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwyfHxzb2NjZXIlMjBmb290YmFsbCUyMGZpZWxkJTIwdHJhaW5pbmd8ZW58MHx8fHwxNzc2MjY4MjIwfDA&ixlib=rb-4.1.0&q=85", "post_url": "https://www.facebook.com/RacingSanGabrielADC/", "author": "Racing San Gabriel ADC", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
-            {"id": str(uuid.uuid4()), "source": "facebook", "content": "Torneo de verano para categorias base. Pronto mas informacion!", "image_url": "", "post_url": "https://www.facebook.com/RacingSanGabrielADC/", "author": "Racing San Gabriel ADC", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "source": "instagram", "content": "Gran entrenamiento de nuestro equipo Juvenil A esta tarde. Preparandose para el proximo partido de liga. Vamos Racing!", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "post_url": "https://www.instagram.com/racingsangabrieladc/", "author": "@racingsangabrieladc", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "source": "instagram", "content": "Inscripciones abiertas para la temporada 2025/2026. Todas las categorias disponibles. Contactanos!", "image_url": "https://images.unsplash.com/photo-1652190416554-c46af8a0ff50?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHw0fHxzb2NjZXIlMjBmb290YmFsbCUyMGZpZWxkJTIwdHJhaW5pbmd8ZW58MHx8fHwxNzc2MjY4MjIwfDA&ixlib=rb-4.1.0&q=85", "post_url": "https://www.instagram.com/racingsangabrieladc/", "author": "@racingsangabrieladc", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "source": "instagram", "content": "Nuestro futbol femenino sigue creciendo. Ya contamos con 4 equipos!", "image_url": "", "post_url": "https://www.instagram.com/racingsangabrieladc/", "author": "@racingsangabrieladc", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "source": "instagram", "content": "Clase de Zumba esta tarde en la Sala Multiactividad. Te apuntas?", "image_url": "", "post_url": "https://www.instagram.com/racingsangabrieladc/", "author": "@racingsangabrieladc", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "source": "facebook", "content": "Victoria del Alevin A este fin de semana. Gran trabajo de todo el equipo y del cuerpo tecnico. Seguimos sumando!", "image_url": "https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/twkjfnq4_image.png", "post_url": "https://www.facebook.com/RacingSanGabrielADC/", "author": "Racing San Gabriel ADC", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "source": "facebook", "content": "Horario de entrenamientos actualizado para esta semana. Consulta en la sede o llamanos al 617 50 27 80.", "image_url": "", "post_url": "https://www.facebook.com/RacingSanGabrielADC/", "author": "Racing San Gabriel ADC", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "source": "facebook", "content": "Nuevas equipaciones disponibles para todos los equipos. Pasate por la sede!", "image_url": "https://images.unsplash.com/photo-1652190416150-d501a60291b3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwyfHxzb2NjZXIlMjBmb290YmFsbCUyMGZpZWxkJTIwdHJhaW5pbmd8ZW58MHx8fHwxNzc2MjY4MjIwfDA&ixlib=rb-4.1.0&q=85", "post_url": "https://www.facebook.com/RacingSanGabrielADC/", "author": "Racing San Gabriel ADC", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "source": "facebook", "content": "Torneo de verano para categorias base. Pronto mas informacion!", "image_url": "", "post_url": "https://www.facebook.com/RacingSanGabrielADC/", "author": "Racing San Gabriel ADC", "posted_at": datetime.now(timezone.utc).isoformat(), "received_at": datetime.now(timezone.utc).isoformat()},
         ]
         await db.social_posts.insert_many(social_posts)
 
     # Seed default fees (cuotas de socios RSG)
-    count = await db.fees.count_documents({})
+    count = await db.fees.count_documents({"club_id": _SEED_CLUB})
     if count == 0:
         now_iso = datetime.now(timezone.utc).isoformat()
         fees = [
             {
-                "id": str(uuid.uuid4()), "name": "Cuota Socio Sede Club RSG",
+                "id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Cuota Socio Sede Club RSG",
                 "amount": 32.50, "fee_type": "socio", "period": "trimestral",
                 "description": "Cuota trimestral para socios de la sede del club",
                 "active": True, "created_at": now_iso,
             },
             {
-                "id": str(uuid.uuid4()), "name": "Cuota Socio Reducida RSG",
+                "id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Cuota Socio Reducida RSG",
                 "amount": 30.00, "fee_type": "socio", "period": "trimestral",
                 "description": "Cuota trimestral reducida (familias numerosas, desempleados...)",
                 "active": True, "created_at": now_iso,
             },
             {
-                "id": str(uuid.uuid4()), "name": "Cuota Socio Menor RSG",
+                "id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Cuota Socio Menor RSG",
                 "amount": 10.00, "fee_type": "socio", "period": "trimestral",
                 "description": "Cuota trimestral para socios menores de edad",
                 "active": True, "created_at": now_iso,
@@ -3345,24 +3519,24 @@ async def seed_demo_data():
         logger.info("Default fees seeded (32.50€, 30€, 10€ trimestral)")
 
     # Seed default products (equipaciones, material)
-    count = await db.products.count_documents({})
+    count = await db.products.count_documents({"club_id": _SEED_CLUB})
     if count == 0:
         now_iso = datetime.now(timezone.utc).isoformat()
         products = [
             {
-                "id": str(uuid.uuid4()), "name": "Kit Equipación Completa", "category": "equipacion",
+                "id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Kit Equipación Completa", "category": "equipacion",
                 "price": 45.00, "stock": None, "active": True,
                 "description": "Camiseta + pantalón + medias oficiales del club",
                 "is_recurring": False, "created_at": now_iso,
             },
             {
-                "id": str(uuid.uuid4()), "name": "Camiseta Oficial Racing San Gabriel", "category": "equipacion",
+                "id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Camiseta Oficial Racing San Gabriel", "category": "equipacion",
                 "price": 20.00, "stock": None, "active": True,
                 "description": "Camiseta oficial temporada 26/27",
                 "is_recurring": False, "created_at": now_iso,
             },
             {
-                "id": str(uuid.uuid4()), "name": "Cuota Mensual Actividades", "category": "cuota",
+                "id": str(uuid.uuid4()), "club_id": _SEED_CLUB, "name": "Cuota Mensual Actividades", "category": "cuota",
                 "price": 25.00, "stock": None, "active": True,
                 "description": "Cuota mensual para actividades dirigidas (Zumba, Fitness, Pilates)",
                 "is_recurring": True, "recurring_period": "mensual", "recurring_amount": 25.00,
@@ -3378,11 +3552,11 @@ async def seed_demo_data():
 @api_router.get("/gdpr/consents")
 async def gdpr_list_consents(request: Request):
     """Lista todos los interesados con su estado de consentimiento RGPD."""
-    await get_current_user(request)
-    players = await db.players.find({}, {"_id": 0, "id": 1, "name": 1, "surname": 1, "email": 1,
+    club_id = await get_club_id_from_request(request)
+    players = await db.players.find({"club_id": club_id}, {"_id": 0, "id": 1, "name": 1, "surname": 1, "email": 1,
         "consent_gdpr": 1, "consent_communications": 1, "consent_date": 1, "consent_ip": 1,
         "consent_guardian_gdpr": 1, "created_at": 1}).to_list(2000)
-    members = await db.members.find({}, {"_id": 0, "id": 1, "name": 1, "surname": 1, "email": 1,
+    members = await db.members.find({"club_id": club_id}, {"_id": 0, "id": 1, "name": 1, "surname": 1, "email": 1,
         "consent_gdpr": 1, "consent_communications": 1, "consent_date": 1, "consent_ip": 1,
         "created_at": 1}).to_list(2000)
     return {
@@ -3396,12 +3570,12 @@ async def gdpr_export_person(person_type: str, person_id: str, request: Request)
     Exporta todos los datos de una persona (RGPD Art. 15 — Derecho de acceso,
     Art. 20 — Portabilidad). Devuelve JSON con todos los registros asociados.
     """
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     if person_type not in ("player", "member"):
         raise HTTPException(status_code=400, detail="Tipo debe ser 'player' o 'member'")
 
     col = db.players if person_type == "player" else db.members
-    person = await col.find_one({"id": person_id}, {"_id": 0})
+    person = await col.find_one({"id": person_id, "club_id": club_id}, {"_id": 0})
     if not person:
         raise HTTPException(status_code=404, detail="Persona no encontrada")
 
@@ -3410,8 +3584,8 @@ async def gdpr_export_person(person_type: str, person_id: str, request: Request)
         person["bank_iban"] = mask_iban(person["bank_iban"])
 
     # Recopilar todos los datos asociados
-    payments = await db.payments.find({"person_id": person_id}, {"_id": 0}).to_list(200)
-    sepa_mandates = await db.sepa_mandates.find({"person_id": person_id}, {"_id": 0}).to_list(50)
+    payments = await db.payments.find({"person_id": person_id, "club_id": club_id}, {"_id": 0}).to_list(200)
+    sepa_mandates = await db.sepa_mandates.find({"person_id": person_id, "club_id": club_id}, {"_id": 0}).to_list(50)
     for m in sepa_mandates:
         m["debtor_iban"] = mask_iban(m.get("debtor_iban", ""))
 
@@ -3419,7 +3593,7 @@ async def gdpr_export_person(person_type: str, person_id: str, request: Request)
     if person_type == "player":
         family_id = person.get("family_id")
         if family_id:
-            guardians = await db.guardians.find({"family_id": family_id}, {"_id": 0}).to_list(10)
+            guardians = await db.guardians.find({"family_id": family_id, "club_id": club_id}, {"_id": 0}).to_list(10)
             for g in guardians:
                 if g.get("bank_iban"):
                     g["bank_iban"] = mask_iban(g["bank_iban"])
@@ -3440,6 +3614,7 @@ async def gdpr_export_person(person_type: str, person_id: str, request: Request)
 
     await db.gdpr_log.insert_one({
         "id": str(uuid.uuid4()),
+        "club_id": club_id,
         "action": "export",
         "person_type": person_type,
         "person_id": person_id,
@@ -3459,12 +3634,12 @@ async def gdpr_delete_person(person_type: str, person_id: str, request: Request)
     Elimina todos los datos de una persona (RGPD Art. 17 — Derecho al olvido).
     Conserva únicamente el registro mínimo para cumplimiento fiscal (Art. 17.3.b).
     """
-    await get_current_user(request)
+    club_id = await get_club_id_from_request(request)
     if person_type not in ("player", "member"):
         raise HTTPException(status_code=400, detail="Tipo debe ser 'player' o 'member'")
 
     col = db.players if person_type == "player" else db.members
-    person = await col.find_one({"id": person_id}, {"_id": 0})
+    person = await col.find_one({"id": person_id, "club_id": club_id}, {"_id": 0})
     if not person:
         raise HTTPException(status_code=404, detail="Persona no encontrada")
 
@@ -3487,11 +3662,11 @@ async def gdpr_delete_person(person_type: str, person_id: str, request: Request)
         "gdpr_deletion_date": now_iso,
         "notes": f"Datos eliminados por solicitud RGPD el {now_iso[:10]}",
     }
-    await col.update_one({"id": person_id}, {"$set": anonymized})
+    await col.update_one({"id": person_id, "club_id": club_id}, {"$set": anonymized})
 
     # Cancelar mandatos SEPA
     await db.sepa_mandates.update_many(
-        {"person_id": person_id},
+        {"person_id": person_id, "club_id": club_id},
         {"$set": {"status": "cancelled", "debtor_iban": "", "person_name": "ANONIMIZADO",
                   "gdpr_cancelled": True, "gdpr_cancelled_date": now_iso}}
     )
@@ -3499,6 +3674,7 @@ async def gdpr_delete_person(person_type: str, person_id: str, request: Request)
     # Registrar la eliminación en log de auditoría
     await db.gdpr_log.insert_one({
         "id": str(uuid.uuid4()),
+        "club_id": club_id,
         "action": "deletion",
         "person_type": person_type,
         "person_id": person_id,
@@ -3511,14 +3687,14 @@ async def gdpr_delete_person(person_type: str, person_id: str, request: Request)
 @api_router.get("/gdpr/log")
 async def gdpr_get_log(request: Request):
     """Registro de auditoría RGPD (accesos, exportaciones, eliminaciones)."""
-    await get_current_user(request)
-    logs = await db.gdpr_log.find({}, {"_id": 0}).sort("date", -1).to_list(500)
+    club_id = await get_club_id_from_request(request)
+    logs = await db.gdpr_log.find({"club_id": club_id}, {"_id": 0}).sort("date", -1).to_list(500)
     return logs
 
 @api_router.get("/gdpr/privacy-policy")
-async def get_privacy_policy():
+async def get_privacy_policy(club_id: str = "racing_sangabriel"):
     """Política de privacidad del club (pública)."""
-    settings = await db.settings.find_one({"type": "club"}, {"_id": 0}) or {}
+    settings = await db.settings.find_one({"club_id": club_id}, {"_id": 0}) or {}
     return {"privacy_policy": settings.get("privacy_policy", ""), "club_name": settings.get("club_name", "")}
 
 

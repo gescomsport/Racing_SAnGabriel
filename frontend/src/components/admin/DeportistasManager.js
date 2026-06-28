@@ -28,6 +28,119 @@ function calcAge(birthdate) {
   } catch { return null; }
 }
 
+const BLANK_GUARDIAN = { name: "", surname: "", dni: "", phone: "", email: "", address: "", city: "", relationship: "padre", bank_iban: "", notes: "", player_ids: [] };
+const BLANK_MEMBER = { name: "", surname: "", dni: "", birthdate: "", phone: "", email: "", address: "", city: "", postal_code: "", member_type: "socio_adulto", bank_iban: "", status: "active", season: "2025/2026", notes: "" };
+
+function GuardianForm({ form, setForm, players, onSave, saveLabel }) {
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const togglePlayer = (id) => setForm(f => {
+    const ids = f.player_ids.includes(id) ? f.player_ids.filter(x => x !== id) : [...f.player_ids, id];
+    return { ...f, player_ids: ids };
+  });
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-sm">Nombre *</Label><Input value={form.name} onChange={e => set("name", e.target.value)} className="mt-1" /></div>
+        <div><Label className="text-sm">Apellidos</Label><Input value={form.surname} onChange={e => set("surname", e.target.value)} className="mt-1" /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-sm">DNI/NIE</Label><Input value={form.dni} onChange={e => set("dni", e.target.value)} className="mt-1" /></div>
+        <div>
+          <Label className="text-sm">Relación</Label>
+          <Select value={form.relationship} onValueChange={v => set("relationship", v)}>
+            <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="padre">Padre</SelectItem>
+              <SelectItem value="madre">Madre</SelectItem>
+              <SelectItem value="tutor_legal">Tutor legal</SelectItem>
+              <SelectItem value="abuelo">Abuelo/a</SelectItem>
+              <SelectItem value="otro">Otro</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-sm">Teléfono</Label><Input value={form.phone} onChange={e => set("phone", e.target.value)} className="mt-1" /></div>
+        <div><Label className="text-sm">Email</Label><Input type="email" value={form.email} onChange={e => set("email", e.target.value)} className="mt-1" /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-sm">Dirección</Label><Input value={form.address} onChange={e => set("address", e.target.value)} className="mt-1" /></div>
+        <div><Label className="text-sm">Ciudad</Label><Input value={form.city} onChange={e => set("city", e.target.value)} className="mt-1" /></div>
+      </div>
+      <div><Label className="text-sm">IBAN bancario</Label><Input value={form.bank_iban} onChange={e => set("bank_iban", e.target.value)} className="mt-1" placeholder="ES00 0000 0000 00 0000000000" /></div>
+      <div>
+        <Label className="text-sm">Deportistas asociados *</Label>
+        <p className="text-xs text-[#94A3B8] mt-0.5 mb-1">Selecciona los deportistas de los que es tutor/a. Puedes seleccionar más de uno (hermanos).</p>
+        {players.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 p-3 border-2 border-[#E2E8F0] rounded-xl max-h-36 overflow-y-auto bg-[#F8FAFF]">
+            {players.map(p => (
+              <button key={p.id} type="button"
+                onClick={() => togglePlayer(p.id)}
+                className={`text-xs px-3 py-1.5 rounded-full border-2 font-medium transition-colors ${form.player_ids.includes(p.id) ? "bg-[#00296B] text-white border-[#00296B]" : "bg-white text-[#475569] border-[#E2E8F0] hover:border-[#00296B] hover:text-[#00296B]"}`}>
+                {p.name} {p.surname}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="p-3 border border-dashed border-[#E2E8F0] rounded-xl text-xs text-[#94A3B8] text-center">
+            No hay deportistas registrados aún. Crea primero al deportista en la pestaña "Deportistas".
+          </div>
+        )}
+      </div>
+      <div><Label className="text-sm">Notas</Label><Input value={form.notes} onChange={e => set("notes", e.target.value)} className="mt-1" /></div>
+      <Button onClick={onSave} disabled={!form.name.trim()} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">{saveLabel}</Button>
+    </div>
+  );
+}
+
+function MemberForm({ form, setForm, onSave, saveLabel }) {
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const TYPES = { socio_adulto: "Adulto", socio_juvenil: "Juvenil", socio_familiar: "Familiar", socio_honor: "Honor", abonado: "Abonado" };
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-sm">Nombre *</Label><Input value={form.name} onChange={e => set("name", e.target.value)} className="mt-1" /></div>
+        <div><Label className="text-sm">Apellidos</Label><Input value={form.surname} onChange={e => set("surname", e.target.value)} className="mt-1" /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-sm">DNI/NIE</Label><Input value={form.dni} onChange={e => set("dni", e.target.value)} className="mt-1" /></div>
+        <div><Label className="text-sm">Fecha de nacimiento</Label><Input type="date" value={form.birthdate} onChange={e => set("birthdate", e.target.value)} className="mt-1" /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-sm">Teléfono</Label><Input value={form.phone} onChange={e => set("phone", e.target.value)} className="mt-1" /></div>
+        <div><Label className="text-sm">Email</Label><Input type="email" value={form.email} onChange={e => set("email", e.target.value)} className="mt-1" /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-sm">Dirección</Label><Input value={form.address} onChange={e => set("address", e.target.value)} className="mt-1" /></div>
+        <div><Label className="text-sm">Ciudad</Label><Input value={form.city} onChange={e => set("city", e.target.value)} className="mt-1" /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-sm">Código postal</Label><Input value={form.postal_code} onChange={e => set("postal_code", e.target.value)} className="mt-1" /></div>
+        <div>
+          <Label className="text-sm">Tipo de socio</Label>
+          <Select value={form.member_type} onValueChange={v => set("member_type", v)}>
+            <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>{Object.entries(TYPES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-sm">IBAN bancario</Label><Input value={form.bank_iban} onChange={e => set("bank_iban", e.target.value)} className="mt-1" /></div>
+        <div>
+          <Label className="text-sm">Estado</Label>
+          <Select value={form.status} onValueChange={v => set("status", v)}>
+            <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="active">Activo</SelectItem><SelectItem value="inactive">Baja</SelectItem></SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div><Label className="text-sm">Temporada</Label><Input value={form.season} onChange={e => set("season", e.target.value)} className="mt-1" /></div>
+      <div><Label className="text-sm">Notas</Label><Input value={form.notes} onChange={e => set("notes", e.target.value)} className="mt-1" /></div>
+      <Button onClick={onSave} disabled={!form.name.trim()} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">{saveLabel}</Button>
+    </div>
+  );
+}
+
 // ──────────────────────────────────────────────────────────
 // DEPORTISTAS TAB
 // ──────────────────────────────────────────────────────────
@@ -40,10 +153,13 @@ function DeportistasTab() {
   const [editPlayer, setEditPlayer] = useState(null);
   const [loading, setLoading] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
+  const [showTutor2, setShowTutor2] = useState(false);
   const BLANK_PLAYER = {
     name: "", surname: "", birthdate: "", dni: "", email: "", phone: "",
-    team_id: "", status: "pending", address: "", notes: "",
+    team_id: "", status: "pending", address: "", city: "", postal_code: "", notes: "",
+    bank_iban: "",
     tutor_name: "", tutor_surname: "", tutor_dni: "", tutor_phone: "", tutor_email: "", tutor_relationship: "padre",
+    tutor2_name: "", tutor2_surname: "", tutor2_dni: "", tutor2_phone: "", tutor2_email: "", tutor2_relationship: "madre",
   };
   const [newForm, setNewForm] = useState(BLANK_PLAYER);
   const setNF = (k, v) => setNewForm(f => ({ ...f, [k]: v }));
@@ -56,12 +172,32 @@ function DeportistasTab() {
 
   const handleCreate = async () => {
     if (!newForm.name.trim() || !newForm.surname.trim()) return;
-    await ax.post("/players", {
+    const pRes = await ax.post("/players", {
       name: newForm.name, surname: newForm.surname, birthdate: newForm.birthdate,
       dni: newForm.dni, email: newForm.email, phone: newForm.phone,
-      team_id: newForm.team_id, status: newForm.status, address: newForm.address, notes: newForm.notes,
+      team_id: newForm.team_id, status: newForm.status,
+      address: newForm.address, city: newForm.city, postal_code: newForm.postal_code,
+      bank_iban: newForm.bank_iban, notes: newForm.notes,
     });
+    const playerId = pRes.data?.id;
+    if (isNewMinor() && playerId) {
+      if (newForm.tutor_name.trim()) {
+        await ax.post("/guardians", {
+          name: newForm.tutor_name, surname: newForm.tutor_surname, dni: newForm.tutor_dni,
+          phone: newForm.tutor_phone, email: newForm.tutor_email, relationship: newForm.tutor_relationship,
+          player_ids: [playerId],
+        }).catch(() => {});
+      }
+      if (showTutor2 && newForm.tutor2_name.trim()) {
+        await ax.post("/guardians", {
+          name: newForm.tutor2_name, surname: newForm.tutor2_surname, dni: newForm.tutor2_dni,
+          phone: newForm.tutor2_phone, email: newForm.tutor2_email, relationship: newForm.tutor2_relationship,
+          player_ids: [playerId],
+        }).catch(() => {});
+      }
+    }
     setNewOpen(false);
+    setShowTutor2(false);
     setNewForm(BLANK_PLAYER);
     load();
   };
@@ -173,36 +309,85 @@ function DeportistasTab() {
                 </div>
               </div>
               <div><Label className="text-sm">Dirección</Label><Input value={newForm.address} onChange={e => setNF("address", e.target.value)} className="mt-1" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="text-sm">Ciudad</Label><Input value={newForm.city} onChange={e => setNF("city", e.target.value)} className="mt-1" /></div>
+                <div><Label className="text-sm">Código postal</Label><Input value={newForm.postal_code} onChange={e => setNF("postal_code", e.target.value)} className="mt-1" /></div>
+              </div>
+              <div><Label className="text-sm">IBAN bancario</Label><Input value={newForm.bank_iban} onChange={e => setNF("bank_iban", e.target.value)} className="mt-1" placeholder="ES00 0000 0000 00 0000000000" /></div>
               <div><Label className="text-sm">Notas internas</Label><Input value={newForm.notes} onChange={e => setNF("notes", e.target.value)} className="mt-1" /></div>
 
-              {/* Tutor section (auto for minors) */}
+              {/* Tutor section — auto-shown for minors */}
               {isNewMinor() && (
-                <div className="border border-amber-200 rounded-xl p-3 bg-amber-50">
-                  <p className="text-xs font-bold text-amber-700 uppercase mb-3">Datos del tutor / padre (menor detectado)</p>
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><Label className="text-sm">Nombre tutor</Label><Input value={newForm.tutor_name} onChange={e => setNF("tutor_name", e.target.value)} className="mt-1" /></div>
-                      <div><Label className="text-sm">Apellidos</Label><Input value={newForm.tutor_surname} onChange={e => setNF("tutor_surname", e.target.value)} className="mt-1" /></div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><Label className="text-sm">DNI tutor</Label><Input value={newForm.tutor_dni} onChange={e => setNF("tutor_dni", e.target.value)} className="mt-1" /></div>
-                      <div>
-                        <Label className="text-sm">Relación</Label>
-                        <Select value={newForm.tutor_relationship} onValueChange={v => setNF("tutor_relationship", v)}>
-                          <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="padre">Padre</SelectItem>
-                            <SelectItem value="madre">Madre</SelectItem>
-                            <SelectItem value="tutor_legal">Tutor legal</SelectItem>
-                          </SelectContent>
-                        </Select>
+                <div className="space-y-3">
+                  <div className="border border-amber-200 rounded-xl p-3 bg-amber-50">
+                    <p className="text-xs font-bold text-amber-700 uppercase mb-3">Tutor 1 — Padre / Madre / Tutor legal (menor detectado)</p>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><Label className="text-sm">Nombre *</Label><Input value={newForm.tutor_name} onChange={e => setNF("tutor_name", e.target.value)} className="mt-1" /></div>
+                        <div><Label className="text-sm">Apellidos</Label><Input value={newForm.tutor_surname} onChange={e => setNF("tutor_surname", e.target.value)} className="mt-1" /></div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><Label className="text-sm">DNI/NIE</Label><Input value={newForm.tutor_dni} onChange={e => setNF("tutor_dni", e.target.value)} className="mt-1" /></div>
+                        <div>
+                          <Label className="text-sm">Relación</Label>
+                          <Select value={newForm.tutor_relationship} onValueChange={v => setNF("tutor_relationship", v)}>
+                            <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="padre">Padre</SelectItem>
+                              <SelectItem value="madre">Madre</SelectItem>
+                              <SelectItem value="tutor_legal">Tutor legal</SelectItem>
+                              <SelectItem value="abuelo">Abuelo/a</SelectItem>
+                              <SelectItem value="otro">Otro</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><Label className="text-sm">Email</Label><Input type="email" value={newForm.tutor_email} onChange={e => setNF("tutor_email", e.target.value)} className="mt-1" /></div>
+                        <div><Label className="text-sm">Móvil</Label><Input value={newForm.tutor_phone} onChange={e => setNF("tutor_phone", e.target.value)} className="mt-1" /></div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><Label className="text-sm">Email tutor</Label><Input type="email" value={newForm.tutor_email} onChange={e => setNF("tutor_email", e.target.value)} className="mt-1" /></div>
-                      <div><Label className="text-sm">Móvil tutor</Label><Input value={newForm.tutor_phone} onChange={e => setNF("tutor_phone", e.target.value)} className="mt-1" /></div>
-                    </div>
                   </div>
+
+                  {!showTutor2 ? (
+                    <button type="button" onClick={() => setShowTutor2(true)}
+                      className="text-xs text-[#2460FF] hover:text-[#00296B] flex items-center gap-1">
+                      <Plus size={12} />Añadir segundo tutor/a
+                    </button>
+                  ) : (
+                    <div className="border border-blue-200 rounded-xl p-3 bg-blue-50">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-bold text-blue-700 uppercase">Tutor 2 — Padre / Madre / Tutor legal</p>
+                        <button type="button" onClick={() => setShowTutor2(false)} className="text-[#94A3B8] hover:text-[#475569]"><X size={14} /></button>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div><Label className="text-sm">Nombre *</Label><Input value={newForm.tutor2_name} onChange={e => setNF("tutor2_name", e.target.value)} className="mt-1" /></div>
+                          <div><Label className="text-sm">Apellidos</Label><Input value={newForm.tutor2_surname} onChange={e => setNF("tutor2_surname", e.target.value)} className="mt-1" /></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div><Label className="text-sm">DNI/NIE</Label><Input value={newForm.tutor2_dni} onChange={e => setNF("tutor2_dni", e.target.value)} className="mt-1" /></div>
+                          <div>
+                            <Label className="text-sm">Relación</Label>
+                            <Select value={newForm.tutor2_relationship} onValueChange={v => setNF("tutor2_relationship", v)}>
+                              <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="padre">Padre</SelectItem>
+                                <SelectItem value="madre">Madre</SelectItem>
+                                <SelectItem value="tutor_legal">Tutor legal</SelectItem>
+                                <SelectItem value="abuelo">Abuelo/a</SelectItem>
+                                <SelectItem value="otro">Otro</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div><Label className="text-sm">Email</Label><Input type="email" value={newForm.tutor2_email} onChange={e => setNF("tutor2_email", e.target.value)} className="mt-1" /></div>
+                          <div><Label className="text-sm">Móvil</Label><Input value={newForm.tutor2_phone} onChange={e => setNF("tutor2_phone", e.target.value)} className="mt-1" /></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -383,6 +568,8 @@ function TutoresTab() {
   const [players, setPlayers] = useState([]);
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState(null);
+  const [newOpen, setNewOpen] = useState(false);
+  const [newForm, setNewForm] = useState({ ...BLANK_GUARDIAN });
 
   const load = useCallback(async () => {
     const [gr, pr] = await Promise.all([ax.get("/guardians"), ax.get("/players")]);
@@ -408,6 +595,13 @@ function TutoresTab() {
     a.click();
   };
 
+  const handleCreate = async () => {
+    await ax.post("/guardians", newForm);
+    setNewOpen(false);
+    setNewForm({ ...BLANK_GUARDIAN });
+    load();
+  };
+
   const handleDelete = async (id) => {
     if (!window.confirm("¿Eliminar tutor?")) return;
     await ax.delete(`/guardians/${id}`);
@@ -417,6 +611,15 @@ function TutoresTab() {
   return (
     <div>
       <div className="flex items-center gap-3 mb-4">
+        <Dialog open={newOpen} onOpenChange={setNewOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-[#2460FF] hover:bg-[#00296B] text-white"><Plus size={14} className="mr-1" />Nuevo tutor</Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Alta manual de tutor / padre</DialogTitle></DialogHeader>
+            <GuardianForm form={newForm} setForm={setNewForm} players={players} onSave={handleCreate} saveLabel="Guardar tutor" />
+          </DialogContent>
+        </Dialog>
         <div className="relative flex-1 max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
           <Input placeholder="Buscar tutor..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 text-sm" />
@@ -500,6 +703,8 @@ function SociosTab() {
   const [members, setMembers] = useState([]);
   const [filters, setFilters] = useState({ search: "", member_type: "", status: "" });
   const [expanded, setExpanded] = useState(null);
+  const [newOpen, setNewOpen] = useState(false);
+  const [newForm, setNewForm] = useState({ ...BLANK_MEMBER });
 
   const load = useCallback(async () => {
     const r = await ax.get("/members");
@@ -522,6 +727,13 @@ function SociosTab() {
     if (filters.status && m.status !== filters.status) return false;
     return true;
   });
+
+  const handleCreate = async () => {
+    await ax.post("/members", newForm);
+    setNewOpen(false);
+    setNewForm({ ...BLANK_MEMBER });
+    load();
+  };
 
   const handleExport = async () => {
     const params = new URLSearchParams();
@@ -547,6 +759,17 @@ function SociosTab() {
 
   return (
     <div>
+      <div className="flex justify-end mb-4">
+        <Dialog open={newOpen} onOpenChange={setNewOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-[#2460FF] hover:bg-[#00296B] text-white"><Plus size={14} className="mr-1" />Nuevo socio</Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Alta manual de socio</DialogTitle></DialogHeader>
+            <MemberForm form={newForm} setForm={setNewForm} onSave={handleCreate} saveLabel="Guardar socio" />
+          </DialogContent>
+        </Dialog>
+      </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         {[
           { label: "Total socios", val: members.length, color: "text-amber-500" },

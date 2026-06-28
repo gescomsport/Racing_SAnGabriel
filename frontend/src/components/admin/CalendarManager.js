@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import {
   Plus, Trash2, ChevronLeft, ChevronRight, Calendar, Clock,
-  Repeat, Users, MapPin, Dumbbell, Trophy, Music, Star, X, Save, Copy
+  Repeat, Users, MapPin, Dumbbell, Trophy, Music, Star, X, Save, Copy, Edit2
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -44,7 +44,52 @@ function addDays(d, n) {
   return r;
 }
 
-// ── Event Form ────────────────────────────────────────────────────────────────
+// ── Event Form (module-level to avoid cursor bug) ─────────────────────────────
+function EventForm({ form, setForm, teams, facilities, onSave, saveLabel }) {
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label className="text-sm">Tipo de evento</Label>
+        <div className="grid grid-cols-3 gap-2 mt-1">
+          {Object.entries(EVENT_TYPES).map(([k, v]) => (
+            <button key={k} onClick={() => set("type", k)}
+              className={`flex flex-col items-center gap-1 px-2 py-2 rounded-xl border-2 text-xs font-bold transition-all ${form.type === k ? "border-[#2460FF] bg-blue-50 text-[#2460FF]" : "border-[#E2E8F0] text-[#475569] hover:border-[#2460FF]/40"}`}>
+              <v.icon size={16} />
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div><Label className="text-sm">Título (opcional)</Label><Input value={form.title} onChange={e => set("title", e.target.value)} className="mt-1" placeholder={EVENT_TYPES[form.type]?.label} /></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-sm">Equipo</Label>
+          <Select value={form.team_id || "_none"} onValueChange={v => set("team_id", v === "_none" ? "" : v)}>
+            <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Todos" /></SelectTrigger>
+            <SelectContent><SelectItem value="_none">Sin equipo</SelectItem>{teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-sm">Instalación</Label>
+          <Select value={form.facility_id || "_none"} onValueChange={v => set("facility_id", v === "_none" ? "" : v)}>
+            <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+            <SelectContent><SelectItem value="_none">Sin instalación</SelectItem>{facilities.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-1"><Label className="text-sm">Fecha</Label><Input type="date" value={form.date} onChange={e => set("date", e.target.value)} className="mt-1" /></div>
+        <div><Label className="text-sm">Hora</Label><Input type="time" value={form.time} onChange={e => set("time", e.target.value)} className="mt-1" /></div>
+        <div><Label className="text-sm">Duración (min)</Label><Input type="number" value={form.duration_min} onChange={e => set("duration_min", e.target.value)} className="mt-1" min="15" step="15" /></div>
+      </div>
+      <div><Label className="text-sm">Notas</Label><Input value={form.notes} onChange={e => set("notes", e.target.value)} className="mt-1" placeholder="Información adicional..." /></div>
+      <Button onClick={onSave} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">{saveLabel}</Button>
+    </div>
+  );
+}
+
+// ── Event Create Dialog ───────────────────────────────────────────────────────
 function EventDialog({ teams, facilities, onCreated, initialDate }) {
   const [open, setOpen] = useState(false);
   const BLANK = {
@@ -53,15 +98,10 @@ function EventDialog({ teams, facilities, onCreated, initialDate }) {
     duration_min: 90, notes: "",
   };
   const [form, setForm] = useState(BLANK);
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleCreate = async () => {
     if (!form.title.trim() && !form.type) return;
-    const payload = {
-      ...form,
-      title: form.title || EVENT_TYPES[form.type]?.label,
-      duration_min: parseInt(form.duration_min) || 90,
-    };
+    const payload = { ...form, title: form.title || EVENT_TYPES[form.type]?.label, duration_min: parseInt(form.duration_min) || 90 };
     await ax.post("/schedule/events", payload);
     setOpen(false);
     setForm(BLANK);
@@ -77,69 +117,65 @@ function EventDialog({ teams, facilities, onCreated, initialDate }) {
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Nuevo evento en el calendario</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <div>
-            <Label className="text-sm">Tipo de evento</Label>
-            <div className="grid grid-cols-3 gap-2 mt-1">
-              {Object.entries(EVENT_TYPES).map(([k, v]) => (
-                <button key={k} onClick={() => set("type", k)}
-                  className={`flex flex-col items-center gap-1 px-2 py-2 rounded-xl border-2 text-xs font-bold transition-all ${form.type === k ? "border-[#2460FF] bg-blue-50 text-[#2460FF]" : "border-[#E2E8F0] text-[#475569] hover:border-[#2460FF]/40"}`}>
-                  <v.icon size={16} />
-                  {v.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div><Label className="text-sm">Título (opcional)</Label><Input value={form.title} onChange={e => set("title", e.target.value)} className="mt-1" placeholder={EVENT_TYPES[form.type]?.label} /></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-sm">Equipo</Label>
-              <Select value={form.team_id} onValueChange={v => set("team_id", v === "_none" ? "" : v)}>
-                <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Todos" /></SelectTrigger>
-                <SelectContent><SelectItem value="_none">Sin equipo</SelectItem>{teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-sm">Instalación</Label>
-              <Select value={form.facility_id} onValueChange={v => set("facility_id", v === "_none" ? "" : v)}>
-                <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
-                <SelectContent><SelectItem value="_none">Sin instalación</SelectItem>{facilities.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-1"><Label className="text-sm">Fecha</Label><Input type="date" value={form.date} onChange={e => set("date", e.target.value)} className="mt-1" /></div>
-            <div><Label className="text-sm">Hora</Label><Input type="time" value={form.time} onChange={e => set("time", e.target.value)} className="mt-1" /></div>
-            <div><Label className="text-sm">Duración (min)</Label><Input type="number" value={form.duration_min} onChange={e => set("duration_min", e.target.value)} className="mt-1" min="15" step="15" /></div>
-          </div>
-          <div><Label className="text-sm">Notas</Label><Input value={form.notes} onChange={e => set("notes", e.target.value)} className="mt-1" placeholder="Información adicional..." /></div>
-          <Button onClick={handleCreate} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">Guardar evento</Button>
-        </div>
+        <EventForm form={form} setForm={setForm} teams={teams} facilities={facilities} onSave={handleCreate} saveLabel="Guardar evento" />
       </DialogContent>
     </Dialog>
   );
 }
 
 // ── Template Dialog ────────────────────────────────────────────────────────────
-function TemplateDialog({ teams, facilities, onCreated }) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [rows, setRows] = useState([
-    { type: "entrenamiento", title: "", team_id: "", facility_id: "", day_of_week: 1, time: "18:00", duration_min: 90 },
-  ]);
+function TemplateDialog({ teams, facilities, onCreated, editTarget, onClose }) {
+  const [open, setOpen] = useState(!!editTarget);
+  const [name, setName] = useState(editTarget?.name || "");
+  const [rows, setRows] = useState(
+    editTarget?.events?.length
+      ? editTarget.events
+      : [{ type: "entrenamiento", title: "", team_id: "", facility_id: "", day_of_week: 1, time: "18:00", duration_min: 90 }]
+  );
+
+  useEffect(() => {
+    if (editTarget) {
+      setOpen(true);
+      setName(editTarget.name || "");
+      setRows(editTarget.events?.length
+        ? editTarget.events
+        : [{ type: "entrenamiento", title: "", team_id: "", facility_id: "", day_of_week: 1, time: "18:00", duration_min: 90 }]);
+    }
+  }, [editTarget]);
 
   const addRow = () => setRows(r => [...r, { type: "entrenamiento", title: "", team_id: "", facility_id: "", day_of_week: 1, time: "18:00", duration_min: 90 }]);
   const removeRow = (i) => setRows(r => r.filter((_, idx) => idx !== i));
   const setRow = (i, k, v) => setRows(r => r.map((row, idx) => idx === i ? { ...row, [k]: v } : row));
 
-  const handleCreate = async () => {
+  const handleSave = async () => {
     if (!name.trim()) return;
-    await ax.post("/schedule/templates", { name, events: rows });
+    if (editTarget) {
+      await ax.put(`/schedule/templates/${editTarget.id}`, { name, events: rows });
+    } else {
+      await ax.post("/schedule/templates", { name, events: rows });
+    }
     setOpen(false);
     setName("");
     setRows([{ type: "entrenamiento", title: "", team_id: "", facility_id: "", day_of_week: 1, time: "18:00", duration_min: 90 }]);
     onCreated();
+    if (onClose) onClose();
   };
+
+  const handleOpenChange = (v) => {
+    setOpen(v);
+    if (!v && onClose) onClose();
+  };
+
+  if (editTarget) {
+    return (
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Editar plantilla semanal</DialogTitle></DialogHeader>
+          <TemplateFormBody name={name} setName={setName} rows={rows} addRow={addRow} removeRow={removeRow} setRow={setRow} teams={teams} facilities={facilities} onSave={handleSave} saveLabel="Guardar cambios" />
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -150,76 +186,82 @@ function TemplateDialog({ teams, facilities, onCreated }) {
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Nueva plantilla semanal</DialogTitle></DialogHeader>
-        <p className="text-sm text-[#475569] mb-3">Define los eventos que se repiten cada semana. Luego podrás aplicarla a cualquier semana con un clic.</p>
-        <div className="mb-4">
-          <Label className="text-sm">Nombre de la plantilla</Label>
-          <Input value={name} onChange={e => setName(e.target.value)} className="mt-1" placeholder="Ej: Horario habitual temporada 26/27" />
-        </div>
-        <div className="space-y-3 mb-4">
-          {rows.map((row, i) => (
-            <div key={i} className="bg-[#F4F7FB] rounded-xl p-3 relative">
-              <button onClick={() => removeRow(i)} className="absolute top-2 right-2 text-[#94A3B8] hover:text-red-500"><X size={14} /></button>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
-                <div>
-                  <Label className="text-xs">Tipo</Label>
-                  <Select value={row.type} onValueChange={v => setRow(i, "type", v)}>
-                    <SelectTrigger className="mt-1 text-xs h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>{Object.entries(EVENT_TYPES).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs">Día de la semana</Label>
-                  <Select value={String(row.day_of_week)} onValueChange={v => setRow(i, "day_of_week", parseInt(v))}>
-                    <SelectTrigger className="mt-1 text-xs h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>{DAYS_FULL.map((d, idx) => <SelectItem key={idx} value={String(idx)}>{d}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs">Hora</Label>
-                  <Input type="time" value={row.time} onChange={e => setRow(i, "time", e.target.value)} className="mt-1 h-8 text-xs" />
-                </div>
-                <div>
-                  <Label className="text-xs">Duración (min)</Label>
-                  <Input type="number" value={row.duration_min} onChange={e => setRow(i, "duration_min", parseInt(e.target.value) || 90)} className="mt-1 h-8 text-xs" min="15" step="15" />
-                </div>
-                <div>
-                  <Label className="text-xs">Equipo</Label>
-                  <Select value={row.team_id || "_none"} onValueChange={v => setRow(i, "team_id", v === "_none" ? "" : v)}>
-                    <SelectTrigger className="mt-1 text-xs h-8"><SelectValue placeholder="Todos" /></SelectTrigger>
-                    <SelectContent><SelectItem value="_none">Sin equipo</SelectItem>{teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs">Instalación</Label>
-                  <Select value={row.facility_id || "_none"} onValueChange={v => setRow(i, "facility_id", v === "_none" ? "" : v)}>
-                    <SelectTrigger className="mt-1 text-xs h-8"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
-                    <SelectContent><SelectItem value="_none">Sin instalación</SelectItem>{facilities.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="col-span-2">
-                  <Label className="text-xs">Título (opcional)</Label>
-                  <Input value={row.title} onChange={e => setRow(i, "title", e.target.value)} className="mt-1 h-8 text-xs" placeholder={EVENT_TYPES[row.type]?.label} />
-                </div>
-              </div>
-            </div>
-          ))}
-          <Button variant="outline" size="sm" onClick={addRow} className="w-full text-xs text-[#2460FF] border-dashed border-[#2460FF]">
-            <Plus size={12} className="mr-1" />Añadir evento a la plantilla
-          </Button>
-        </div>
-        <Button onClick={handleCreate} disabled={!name.trim()} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">
-          <Save size={14} className="mr-1" />Guardar plantilla
-        </Button>
+        <p className="text-sm text-[#475569] mb-3">Define los eventos que se repiten cada semana. Aplícala a cualquier semana con un clic.</p>
+        <TemplateFormBody name={name} setName={setName} rows={rows} addRow={addRow} removeRow={removeRow} setRow={setRow} teams={teams} facilities={facilities} onSave={handleSave} saveLabel="Guardar plantilla" />
       </DialogContent>
     </Dialog>
   );
 }
 
-// ── Week View ─────────────────────────────────────────────────────────────────
-function WeekView({ weekStart, events, teams, facilities, onDelete }) {
-  const teamMap = Object.fromEntries(teams.map(t => [t.id, t.name]));
-  const facilityMap = Object.fromEntries(facilities.map(f => [f.id, f.name]));
+function TemplateFormBody({ name, setName, rows, addRow, removeRow, setRow, teams, facilities, onSave, saveLabel }) {
+  return (
+    <>
+      <div className="mb-4">
+        <Label className="text-sm">Nombre de la plantilla</Label>
+        <Input value={name} onChange={e => setName(e.target.value)} className="mt-1" placeholder="Ej: Horario habitual temporada 26/27" />
+      </div>
+      <div className="space-y-3 mb-4">
+        {rows.map((row, i) => (
+          <div key={i} className="bg-[#F4F7FB] rounded-xl p-3 relative">
+            <button onClick={() => removeRow(i)} className="absolute top-2 right-2 text-[#94A3B8] hover:text-red-500"><X size={14} /></button>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
+              <div>
+                <Label className="text-xs">Tipo</Label>
+                <Select value={row.type} onValueChange={v => setRow(i, "type", v)}>
+                  <SelectTrigger className="mt-1 text-xs h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>{Object.entries(EVENT_TYPES).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Día de la semana</Label>
+                <Select value={String(row.day_of_week)} onValueChange={v => setRow(i, "day_of_week", parseInt(v))}>
+                  <SelectTrigger className="mt-1 text-xs h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>{DAYS_FULL.map((d, idx) => <SelectItem key={idx} value={String(idx)}>{d}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Hora</Label>
+                <Input type="time" value={row.time} onChange={e => setRow(i, "time", e.target.value)} className="mt-1 h-8 text-xs" />
+              </div>
+              <div>
+                <Label className="text-xs">Duración (min)</Label>
+                <Input type="number" value={row.duration_min} onChange={e => setRow(i, "duration_min", parseInt(e.target.value) || 90)} className="mt-1 h-8 text-xs" min="15" step="15" />
+              </div>
+              <div>
+                <Label className="text-xs">Equipo</Label>
+                <Select value={row.team_id || "_none"} onValueChange={v => setRow(i, "team_id", v === "_none" ? "" : v)}>
+                  <SelectTrigger className="mt-1 text-xs h-8"><SelectValue placeholder="Todos" /></SelectTrigger>
+                  <SelectContent><SelectItem value="_none">Sin equipo</SelectItem>{teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Instalación</Label>
+                <Select value={row.facility_id || "_none"} onValueChange={v => setRow(i, "facility_id", v === "_none" ? "" : v)}>
+                  <SelectTrigger className="mt-1 text-xs h-8"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                  <SelectContent><SelectItem value="_none">Sin instalación</SelectItem>{facilities.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs">Título (opcional)</Label>
+                <Input value={row.title} onChange={e => setRow(i, "title", e.target.value)} className="mt-1 h-8 text-xs" placeholder={EVENT_TYPES[row.type]?.label} />
+              </div>
+            </div>
+          </div>
+        ))}
+        <Button variant="outline" size="sm" onClick={addRow} className="w-full text-xs text-[#2460FF] border-dashed border-[#2460FF]">
+          <Plus size={12} className="mr-1" />Añadir evento a la plantilla
+        </Button>
+      </div>
+      <Button onClick={onSave} disabled={!name.trim()} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">
+        <Save size={14} className="mr-1" />{saveLabel}
+      </Button>
+    </>
+  );
+}
 
+// ── Week View ─────────────────────────────────────────────────────────────────
+function WeekView({ weekStart, events, teams, facilities, onDelete, onEdit }) {
+  const teamMap = Object.fromEntries(teams.map(t => [t.id, t.name]));
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const eventsForDay = (d) => {
@@ -229,7 +271,6 @@ function WeekView({ weekStart, events, teams, facilities, onDelete }) {
 
   return (
     <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
-      {/* Header days */}
       <div className="grid grid-cols-7 border-b border-[#E2E8F0]">
         {days.map((d, i) => {
           const isToday = formatDate(d) === formatDate(new Date());
@@ -241,7 +282,6 @@ function WeekView({ weekStart, events, teams, facilities, onDelete }) {
           );
         })}
       </div>
-      {/* Events grid */}
       <div className="grid grid-cols-7 min-h-48">
         {days.map((d, i) => {
           const dayEvts = eventsForDay(d);
@@ -250,11 +290,11 @@ function WeekView({ weekStart, events, teams, facilities, onDelete }) {
               {dayEvts.map(ev => {
                 const et = EVENT_TYPES[ev.type] || EVENT_TYPES.evento;
                 return (
-                  <div key={ev.id} className="group relative rounded-lg px-2 py-1.5" style={{ background: et.dot + "18", borderLeft: `3px solid ${et.dot}` }}>
+                  <div key={ev.id} className="group relative rounded-lg px-2 py-1.5 cursor-pointer" style={{ background: et.dot + "18", borderLeft: `3px solid ${et.dot}` }} onClick={() => onEdit(ev)}>
                     <p className="text-xs font-bold leading-tight truncate" style={{ color: et.dot }}>{ev.title || et.label}</p>
                     {ev.time && <p className="text-xs text-[#94A3B8] flex items-center gap-0.5"><Clock size={9} />{ev.time}</p>}
                     {ev.team_id && <p className="text-xs text-[#94A3B8] truncate">{teamMap[ev.team_id] || ""}</p>}
-                    <button onClick={() => onDelete(ev.id)} className="absolute top-0.5 right-0.5 text-[#CBD5E1] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={e => { e.stopPropagation(); onDelete(ev.id); }} className="absolute top-0.5 right-0.5 text-[#CBD5E1] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
                       <X size={11} />
                     </button>
                   </div>
@@ -282,6 +322,14 @@ export default function CalendarManager() {
   const [filterTeam, setFilterTeam] = useState("");
   const [filterType, setFilterType] = useState("");
 
+  // Edit event state
+  const [editEvent, setEditEvent] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editOpen, setEditOpen] = useState(false);
+
+  // Edit template state
+  const [editTemplate, setEditTemplate] = useState(null);
+
   const load = useCallback(async () => {
     const from = formatDate(weekStart);
     const to = formatDate(addDays(weekStart, 6));
@@ -308,6 +356,28 @@ export default function CalendarManager() {
     load();
   };
 
+  const openEditEvent = (ev) => {
+    setEditEvent(ev);
+    setEditForm({
+      type: ev.type || "entrenamiento",
+      title: ev.title || "",
+      team_id: ev.team_id || "",
+      facility_id: ev.facility_id || "",
+      date: ev.date || formatDate(new Date()),
+      time: ev.time || "09:00",
+      duration_min: ev.duration_min || 90,
+      notes: ev.notes || "",
+    });
+    setEditOpen(true);
+  };
+
+  const handleEditEvent = async () => {
+    const payload = { ...editForm, title: editForm.title || EVENT_TYPES[editForm.type]?.label, duration_min: parseInt(editForm.duration_min) || 90 };
+    await ax.put(`/schedule/events/${editEvent.id}`, payload);
+    setEditOpen(false);
+    load();
+  };
+
   const handleDeleteTemplate = async (id) => {
     if (!window.confirm("¿Eliminar plantilla?")) return;
     await ax.delete(`/schedule/templates/${id}`);
@@ -319,9 +389,7 @@ export default function CalendarManager() {
     setGenLoading(true);
     setGenMsg(null);
     try {
-      const r = await ax.post(`/schedule/templates/${genTemplateId}/generate-week`, {
-        week_start: formatDate(weekStart),
-      });
+      const r = await ax.post(`/schedule/templates/${genTemplateId}/generate-week`, { week_start: formatDate(weekStart) });
       setGenMsg({ type: "ok", msg: `${r.data.created} eventos creados para la semana del ${formatDate(weekStart)}` });
       load();
     } catch (e) {
@@ -371,8 +439,6 @@ export default function CalendarManager() {
             <Button variant="ghost" size="sm" onClick={nextWeek} className="h-8 w-8 p-0"><ChevronRight size={14} /></Button>
           </div>
           <Button variant="outline" size="sm" onClick={goToday} className="text-xs">Hoy</Button>
-
-          {/* Generate from template */}
           <div className="ml-auto flex items-center gap-2 flex-wrap">
             <Select value={genTemplateId} onValueChange={setGenTemplateId}>
               <SelectTrigger className="text-xs h-8 w-48"><SelectValue placeholder="Aplicar plantilla..." /></SelectTrigger>
@@ -382,7 +448,6 @@ export default function CalendarManager() {
               <Copy size={12} className="mr-1" />{genLoading ? "Generando..." : "Generar semana"}
             </Button>
           </div>
-
           {genMsg && (
             <div className={`w-full text-xs px-3 py-2 rounded-lg ${genMsg.type === "ok" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
               {genMsg.msg}
@@ -408,7 +473,7 @@ export default function CalendarManager() {
 
       {/* WEEK VIEW */}
       {tab === "week" && (
-        <WeekView weekStart={weekStart} events={filteredEvents} teams={teams} facilities={facilities} onDelete={handleDeleteEvent} />
+        <WeekView weekStart={weekStart} events={filteredEvents} teams={teams} facilities={facilities} onDelete={handleDeleteEvent} onEdit={openEditEvent} />
       )}
 
       {/* LIST VIEW */}
@@ -441,9 +506,14 @@ export default function CalendarManager() {
                     {facName && <span className="flex items-center gap-1"><MapPin size={10} />{facName}</span>}
                   </div>
                 </div>
-                <Button size="sm" variant="ghost" className="text-red-400 h-8 w-8 p-0 flex-shrink-0" onClick={() => handleDeleteEvent(ev.id)}>
-                  <Trash2 size={14} />
-                </Button>
+                <div className="flex gap-1 flex-shrink-0">
+                  <Button size="sm" variant="ghost" className="text-[#2460FF] h-8 w-8 p-0" onClick={() => openEditEvent(ev)}>
+                    <Edit2 size={13} />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-red-400 h-8 w-8 p-0" onClick={() => handleDeleteEvent(ev.id)}>
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
               </div>
             );
           })}
@@ -468,9 +538,14 @@ export default function CalendarManager() {
                     <p className="font-bold text-[#00296B]">{t.name}</p>
                     <p className="text-xs text-[#94A3B8]">{t.events?.length || 0} eventos por semana</p>
                   </div>
-                  <Button size="sm" variant="ghost" className="text-red-400 h-8 w-8 p-0" onClick={() => handleDeleteTemplate(t.id)}>
-                    <Trash2 size={14} />
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" className="text-[#2460FF] h-8 w-8 p-0" onClick={() => setEditTemplate(t)}>
+                      <Edit2 size={14} />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-red-400 h-8 w-8 p-0" onClick={() => handleDeleteTemplate(t.id)}>
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {(t.events || []).map((ev, i) => {
@@ -486,6 +561,27 @@ export default function CalendarManager() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Edit Event Dialog */}
+      {editForm && (
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Editar evento</DialogTitle></DialogHeader>
+            <EventForm form={editForm} setForm={setEditForm} teams={teams} facilities={facilities} onSave={handleEditEvent} saveLabel="Guardar cambios" />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Edit Template Dialog */}
+      {editTemplate && (
+        <TemplateDialog
+          teams={teams}
+          facilities={facilities}
+          onCreated={load}
+          editTarget={editTemplate}
+          onClose={() => setEditTemplate(null)}
+        />
       )}
     </div>
   );

@@ -24,7 +24,7 @@ const DAYS = [
 
 const DAY_ORDER = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
 
-const EMPTY_FORM = { team_id: "", day_of_week: "lunes", start_time: "", end_time: "", location: "", notes: "" };
+const EMPTY_FORM = { team_id: "", day_of_week: "lunes", start_time: "", end_time: "", facility_id: "", location: "", notes: "" };
 
 const DAY_COLORS = {
   lunes: "bg-blue-50 text-blue-700",
@@ -39,6 +39,7 @@ const DAY_COLORS = {
 export default function TrainingManager() {
   const [schedules, setSchedules] = useState([]);
   const [teams, setTeams] = useState([]);
+  const [facilities, setFacilities] = useState([]);
   const [open, setOpen] = useState(false);
   const [editSchedule, setEditSchedule] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -47,9 +48,14 @@ export default function TrainingManager() {
   useEffect(() => { load(); }, []);
 
   const load = async () => {
-    const [s, t] = await Promise.all([ax.get("/training-schedules"), ax.get("/teams")]);
+    const [s, t, f] = await Promise.all([
+      ax.get("/training-schedules"),
+      ax.get("/teams"),
+      ax.get("/facilities").catch(() => ({ data: [] })),
+    ]);
     setSchedules(s.data);
     setTeams(t.data);
+    setFacilities(f.data);
   };
 
   const openCreate = () => {
@@ -60,9 +66,11 @@ export default function TrainingManager() {
 
   const openEdit = (s) => {
     setEditSchedule(s);
-    setForm({ ...EMPTY_FORM, ...s });
+    setForm({ ...EMPTY_FORM, ...s, facility_id: s.facility_id || "" });
     setOpen(true);
   };
+
+  const getFacilityName = (id) => facilities.find(f => f.id === id)?.name || "";
 
   const handleSave = async () => {
     if (editSchedule) {
@@ -142,7 +150,9 @@ export default function TrainingManager() {
                         </div>
                         <div>
                           <p className="font-medium text-[#0F172A] text-sm">{getTeamName(item.team_id)}</p>
-                          {item.location && <p className="text-xs text-[#475569]">{item.location}</p>}
+                          {(item.facility_id ? getFacilityName(item.facility_id) : item.location) && (
+                            <p className="text-xs text-[#475569]">{item.facility_id ? getFacilityName(item.facility_id) : item.location}</p>
+                          )}
                           {item.notes && <p className="text-xs text-[#94A3B8] italic">{item.notes}</p>}
                         </div>
                       </div>
@@ -201,7 +211,32 @@ export default function TrainingManager() {
 
             <div>
               <Label className="text-sm">Campo / Instalación</Label>
-              <Input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} className="mt-1" placeholder="Campo Municipal San Gabriel..." />
+              {facilities.length > 0 ? (
+                <>
+                  <Select
+                    value={form.facility_id || "_manual"}
+                    onValueChange={v => {
+                      if (v === "_manual") {
+                        setForm(f => ({ ...f, facility_id: "", location: "" }));
+                      } else {
+                        const fac = facilities.find(f => f.id === v);
+                        setForm(f => ({ ...f, facility_id: v, location: fac?.name || "" }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Seleccionar instalación..." /></SelectTrigger>
+                    <SelectContent>
+                      {facilities.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                      <SelectItem value="_manual">Otra (escribir manualmente)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {(!form.facility_id || form.facility_id === "_manual") && (
+                    <Input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} className="mt-2" placeholder="Nombre del campo o instalación..." />
+                  )}
+                </>
+              ) : (
+                <Input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} className="mt-1" placeholder="Campo Municipal San Gabriel..." />
+              )}
             </div>
 
             <div>

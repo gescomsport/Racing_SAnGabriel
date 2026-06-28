@@ -27,6 +27,73 @@ const EMPTY_FORM = {
   is_recurring: false, recurring_period: "mensual", recurring_amount: "",
 };
 
+const setF = (setter) => (k, v) => setter(f => ({ ...f, [k]: v }));
+
+function ProductForm({ f, setter, onSubmit, submitLabel, isSaved }) {
+  const sf = setF(setter);
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2"><Label className="text-sm">Nombre del producto</Label><Input value={f.name} onChange={e => sf("name", e.target.value)} className="mt-1" /></div>
+        <div>
+          <Label className="text-sm">Categoría</Label>
+          <Select value={f.category} onValueChange={v => sf("category", v)}>
+            <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(CATEGORIES).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-sm">Precio (€)</Label>
+          <Input type="number" step="0.01" min="0" value={f.price} onChange={e => sf("price", e.target.value)} className="mt-1" placeholder="0.00" />
+        </div>
+        <div><Label className="text-sm">SKU / Referencia</Label><Input value={f.sku} onChange={e => sf("sku", e.target.value)} className="mt-1" placeholder="RSG-CAM-001" /></div>
+        <div><Label className="text-sm">Stock (vacío = ilimitado)</Label><Input type="number" min="0" value={f.stock} onChange={e => sf("stock", e.target.value)} className="mt-1" placeholder="—" /></div>
+        <div className="col-span-2"><Label className="text-sm">Descripción</Label><Input value={f.description} onChange={e => sf("description", e.target.value)} className="mt-1" /></div>
+        <div className="col-span-2"><Label className="text-sm">URL imagen</Label><Input value={f.image_url} onChange={e => sf("image_url", e.target.value)} className="mt-1" /></div>
+      </div>
+
+      {/* Recurring fee toggle */}
+      <div className="border border-[#E2E8F0] rounded-xl p-3 bg-[#F8FAFF]">
+        <label className="flex items-center gap-3 cursor-pointer select-none">
+          <div
+            onClick={() => sf("is_recurring", !f.is_recurring)}
+            className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${f.is_recurring ? "bg-[#2460FF]" : "bg-gray-200"}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${f.is_recurring ? "translate-x-5" : "translate-x-0"}`} />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-[#0F172A]">Cuota periódica / recurrente</p>
+            <p className="text-xs text-[#94A3B8]">Actívalo si este producto se cobra de forma repetida</p>
+          </div>
+        </label>
+        {f.is_recurring && (
+          <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-[#E2E8F0]">
+            <div>
+              <Label className="text-sm">Periodicidad</Label>
+              <Select value={f.recurring_period} onValueChange={v => sf("recurring_period", v)}>
+                <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PERIOD_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm">Importe por período (€)</Label>
+              <Input type="number" step="0.01" min="0" value={f.recurring_amount} onChange={e => sf("recurring_amount", e.target.value)} className="mt-1" placeholder={f.price || "0.00"} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Button onClick={onSubmit} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">
+        {isSaved ? <><CheckCircle size={14} className="mr-1" />Guardado</> : submitLabel}
+      </Button>
+    </div>
+  );
+}
+
 export default function ProductosManager() {
   const [products, setProducts] = useState([]);
   const [open, setOpen] = useState(false);
@@ -43,8 +110,6 @@ export default function ProductosManager() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  const setF = (setter) => (k, v) => setter(f => ({ ...f, [k]: v }));
 
   const buildPayload = (f) => ({
     ...f,
@@ -96,71 +161,6 @@ export default function ProductosManager() {
   const filtered = products.filter(p => !filterCat || p.category === filterCat);
   const active = filtered.filter(p => p.active);
   const inactive = filtered.filter(p => !p.active);
-
-  const ProductForm = ({ f, setter, onSubmit, submitLabel, isSaved }) => {
-    const sf = setF(setter);
-    return (
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2"><Label className="text-sm">Nombre del producto</Label><Input value={f.name} onChange={e => sf("name", e.target.value)} className="mt-1" /></div>
-          <div>
-            <Label className="text-sm">Categoría</Label>
-            <Select value={f.category} onValueChange={v => sf("category", v)}>
-              <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {Object.entries(CATEGORIES).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-sm">Precio (€)</Label>
-            <Input type="number" step="0.01" min="0" value={f.price} onChange={e => sf("price", e.target.value)} className="mt-1" placeholder="0.00" />
-          </div>
-          <div><Label className="text-sm">SKU / Referencia</Label><Input value={f.sku} onChange={e => sf("sku", e.target.value)} className="mt-1" placeholder="RSG-CAM-001" /></div>
-          <div><Label className="text-sm">Stock (vacío = ilimitado)</Label><Input type="number" min="0" value={f.stock} onChange={e => sf("stock", e.target.value)} className="mt-1" placeholder="—" /></div>
-          <div className="col-span-2"><Label className="text-sm">Descripción</Label><Input value={f.description} onChange={e => sf("description", e.target.value)} className="mt-1" /></div>
-          <div className="col-span-2"><Label className="text-sm">URL imagen</Label><Input value={f.image_url} onChange={e => sf("image_url", e.target.value)} className="mt-1" /></div>
-        </div>
-
-        {/* Recurring fee toggle */}
-        <div className="border border-[#E2E8F0] rounded-xl p-3 bg-[#F8FAFF]">
-          <label className="flex items-center gap-3 cursor-pointer select-none">
-            <div
-              onClick={() => sf("is_recurring", !f.is_recurring)}
-              className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${f.is_recurring ? "bg-[#2460FF]" : "bg-gray-200"}`}
-            >
-              <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${f.is_recurring ? "translate-x-5" : "translate-x-0"}`} />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-[#0F172A]">Cuota periódica / recurrente</p>
-              <p className="text-xs text-[#94A3B8]">Actívalo si este producto se cobra de forma repetida</p>
-            </div>
-          </label>
-          {f.is_recurring && (
-            <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-[#E2E8F0]">
-              <div>
-                <Label className="text-sm">Periodicidad</Label>
-                <Select value={f.recurring_period} onValueChange={v => sf("recurring_period", v)}>
-                  <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(PERIOD_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-sm">Importe por período (€)</Label>
-                <Input type="number" step="0.01" min="0" value={f.recurring_amount} onChange={e => sf("recurring_amount", e.target.value)} className="mt-1" placeholder={f.price || "0.00"} />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <Button onClick={onSubmit} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">
-          {isSaved ? <><CheckCircle size={14} className="mr-1" />Guardado</> : submitLabel}
-        </Button>
-      </div>
-    );
-  };
 
   return (
     <div data-testid="admin-productos-manager">

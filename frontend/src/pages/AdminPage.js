@@ -5,8 +5,7 @@ import axios from "axios";
 import {
   LayoutDashboard, Newspaper, Users, CalendarDays, Images,
   Mail, Settings, LogOut, Plus, Trash2, Edit, ChevronRight, Menu, X,
-  Rss, Instagram, Facebook, ExternalLink, Info, CheckCircle, Copy, Eye,
-  UserCheck, Star, Clock, Shield, Euro, CreditCard, FileText, Send, Building2, Landmark,
+  Rss, CheckCircle, UserCheck, Star, Clock, Shield, Euro, CreditCard, FileText, Send, Building2, Landmark,
   BarChart3, Package, MessageSquare, UsersRound, KeyRound, ShoppingCart, MapPin,
   TrendingUp, AlertTriangle
 } from "lucide-react";
@@ -22,12 +21,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "../components/ui/select";
 import SocialMediaManager from "../components/SocialMediaManager";
-import PlayersManager from "../components/admin/PlayersManager";
-import GuardiansManager from "../components/admin/GuardiansManager";
-import MembersManager from "../components/admin/MembersManager";
 import TrainingManager from "../components/admin/TrainingManager";
 import FeesManager from "../components/admin/FeesManager";
-import PaymentsManager from "../components/admin/PaymentsManager";
 import SepaManager from "../components/admin/SepaManager";
 import ReportsManager from "../components/admin/ReportsManager";
 import DeportistasManager from "../components/admin/DeportistasManager";
@@ -38,6 +33,7 @@ import VentasManager from "../components/admin/VentasManager";
 import FacilitiesManager from "../components/admin/FacilitiesManager";
 import CalendarManager from "../components/admin/CalendarManager";
 import GdprManager from "../components/admin/GdprManager";
+import PatrocinadoresManager from "../components/admin/PatrocinadoresManager";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const ax = axios.create({ baseURL: API, withCredentials: true });
@@ -45,26 +41,23 @@ const ax = axios.create({ baseURL: API, withCredentials: true });
 const sidebarItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "deportistas", label: "Deportistas", icon: UsersRound, highlight: true },
+  { id: "equipos", label: "Equipos", icon: Users, highlight: true },
   { id: "ventas", label: "Ventas y Cobros", icon: ShoppingCart, highlight: true },
   { id: "comunicaciones", label: "Comunicaciones", icon: MessageSquare, highlight: true },
   { id: "productos", label: "Productos", icon: Package, highlight: true },
+  { id: "tarifas", label: "Tarifas", icon: Euro, highlight: true },
   { id: "instalaciones", label: "Instalaciones", icon: MapPin, highlight: true },
   { id: "calendario", label: "Calendario", icon: CalendarDays, highlight: true },
-  { id: "usuarios", label: "Usuarios / Acceso", icon: KeyRound, highlight: true },
-  { id: "social", label: "Redes Sociales", icon: Rss },
-  { id: "news", label: "Noticias", icon: Newspaper },
-  { id: "players", label: "Jugadores (legacy)", icon: UserCheck },
-  { id: "guardians", label: "Tutores (legacy)", icon: Shield },
-  { id: "members", label: "Socios (legacy)", icon: Star },
-  { id: "teams", label: "Equipos", icon: Users },
-  { id: "training", label: "Horarios", icon: Clock },
+  { id: "training", label: "Horarios Entreno.", icon: Clock },
   { id: "matches", label: "Partidos", icon: CalendarDays },
-  { id: "fees", label: "Tarifas", icon: Euro },
-  { id: "payments", label: "Pagos", icon: CreditCard },
+  { id: "gallery", label: "Galería", icon: Images },
+  { id: "news", label: "Noticias", icon: Newspaper },
+  { id: "patrocinadores", label: "Patrocinadores", icon: Star, highlight: true },
+  { id: "contacts", label: "Mensajes", icon: Mail },
   { id: "sepa", label: "SEPA / Domicil.", icon: Landmark },
   { id: "reports", label: "Informes", icon: BarChart3 },
-  { id: "gallery", label: "Galería", icon: Images },
-  { id: "contacts", label: "Mensajes", icon: Mail },
+  { id: "usuarios", label: "Usuarios / Acceso", icon: KeyRound, highlight: true },
+  { id: "social", label: "Redes Sociales", icon: Rss },
   { id: "gdpr", label: "RGPD / Privacidad", icon: Shield, highlight: true },
   { id: "settings", label: "Ajustes", icon: Settings },
 ];
@@ -153,26 +146,23 @@ export default function AdminPage() {
       <main className="flex-1 p-4 lg:p-8 overflow-auto" data-testid="admin-content">
         {section === "dashboard" && <DashboardSection news={news} teams={teams} matches={matches} contacts={contacts} playerCount={playerCount} memberCount={memberCount} />}
         {section === "deportistas" && <DeportistasManager />}
+        {section === "equipos" && <TeamsManager teams={teams} onRefresh={loadData} />}
         {section === "ventas" && <VentasManager />}
         {section === "comunicaciones" && <ComunicacionesManager />}
         {section === "productos" && <ProductosManager />}
+        {section === "tarifas" && <FeesManager />}
         {section === "instalaciones" && <FacilitiesManager />}
         {section === "calendario" && <CalendarManager />}
-        {section === "usuarios" && <UsuariosManager />}
-        {section === "social" && <SocialMediaManager />}
-        {section === "news" && <NewsManager news={news} onRefresh={loadData} />}
-        {section === "players" && <PlayersManager />}
-        {section === "guardians" && <GuardiansManager />}
-        {section === "members" && <MembersManager />}
-        {section === "teams" && <TeamsManager teams={teams} onRefresh={loadData} />}
         {section === "training" && <TrainingManager />}
-        {section === "fees" && <FeesManager />}
-        {section === "payments" && <PaymentsManager />}
-        {section === "sepa" && <SepaManager />}
-        {section === "reports" && <ReportsManager />}
         {section === "matches" && <MatchesManager matches={matches} onRefresh={loadData} />}
         {section === "gallery" && <GalleryManager onRefresh={loadData} />}
+        {section === "news" && <NewsManager news={news} onRefresh={loadData} />}
+        {section === "patrocinadores" && <PatrocinadoresManager />}
         {section === "contacts" && <ContactsManager onRefresh={loadData} />}
+        {section === "sepa" && <SepaManager />}
+        {section === "reports" && <ReportsManager />}
+        {section === "usuarios" && <UsuariosManager />}
+        {section === "social" && <SocialMediaManager />}
         {section === "gdpr" && <GdprManager />}
         {section === "settings" && <SettingsManager settings={settings} onRefresh={loadData} />}
       </main>
@@ -275,18 +265,124 @@ function DashboardSection({ news, teams, matches, contacts, playerCount, memberC
   );
 }
 
+const BLANK_NEWS = { title: "", content: "", image_url: "", source: "web", category: "general" };
+
+function NewsForm({ form, setForm, onSave, saveLabel }) {
+  const [uploadMode, setUploadMode] = useState("file");
+  const [preview, setPreview] = useState(form.image_url || null);
+  const [uploading, setUploading] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPreview(URL.createObjectURL(file));
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await ax.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      set("image_url", r.data.url);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const resolvedPreview = preview
+    ? (preview.startsWith("blob:") ? preview : `${process.env.REACT_APP_BACKEND_URL}${preview}`)
+    : (form.image_url?.startsWith("/api/") ? `${process.env.REACT_APP_BACKEND_URL}${form.image_url}` : form.image_url);
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label className="text-sm">Título *</Label>
+        <Input value={form.title} onChange={e => set("title", e.target.value)} className="mt-1" />
+      </div>
+      <div>
+        <Label className="text-sm">Contenido</Label>
+        <Textarea value={form.content} onChange={e => set("content", e.target.value)} rows={4} className="mt-1" />
+      </div>
+      <div>
+        <Label className="text-sm">Imagen</Label>
+        <div className="flex gap-2 mt-1 mb-2">
+          <button onClick={() => setUploadMode("file")} className={`flex-1 py-1.5 rounded-lg text-xs font-bold border-2 transition-all ${uploadMode === "file" ? "border-[#2460FF] bg-blue-50 text-[#2460FF]" : "border-[#E2E8F0] text-[#475569]"}`}>📂 Subir archivo</button>
+          <button onClick={() => setUploadMode("url")} className={`flex-1 py-1.5 rounded-lg text-xs font-bold border-2 transition-all ${uploadMode === "url" ? "border-[#2460FF] bg-blue-50 text-[#2460FF]" : "border-[#E2E8F0] text-[#475569]"}`}>🔗 URL externa</button>
+        </div>
+        {uploadMode === "file" ? (
+          <label className="block w-full border-2 border-dashed border-[#E2E8F0] rounded-xl p-3 text-center cursor-pointer hover:border-[#2460FF] transition-colors">
+            {resolvedPreview ? (
+              <img src={resolvedPreview} alt="preview" className="h-28 mx-auto object-cover rounded-lg mb-1" />
+            ) : (
+              <div className="py-3 text-[#94A3B8]">
+                <div className="text-2xl mb-1">🖼️</div>
+                <p className="text-xs">Haz clic para seleccionar imagen</p>
+              </div>
+            )}
+            {uploading && <p className="text-xs text-[#2460FF] mt-1">Subiendo...</p>}
+            <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
+          </label>
+        ) : (
+          <Input value={form.image_url} onChange={e => { set("image_url", e.target.value); setPreview(null); }} placeholder="https://..." className="mt-1" />
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-sm">Fuente</Label>
+          <Select value={form.source} onValueChange={v => set("source", v)}>
+            <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="web">Web</SelectItem>
+              <SelectItem value="instagram">Instagram</SelectItem>
+              <SelectItem value="facebook">Facebook</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-sm">Categoría</Label>
+          <Select value={form.category} onValueChange={v => set("category", v)}>
+            <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="general">General</SelectItem>
+              <SelectItem value="resultados">Resultados</SelectItem>
+              <SelectItem value="eventos">Eventos</SelectItem>
+              <SelectItem value="fichajes">Fichajes</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <Button onClick={onSave} disabled={!form.title || uploading} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">{saveLabel}</Button>
+    </div>
+  );
+}
+
 function NewsManager({ news, onRefresh }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", content: "", image_url: "", source: "web", category: "general" });
+  const [editOpen, setEditOpen] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [form, setForm] = useState({ ...BLANK_NEWS });
+  const [editForm, setEditForm] = useState({ ...BLANK_NEWS });
 
   const handleCreate = async () => {
     await ax.post("/news", form);
     setOpen(false);
-    setForm({ title: "", content: "", image_url: "", source: "web", category: "general" });
+    setForm({ ...BLANK_NEWS });
+    onRefresh();
+  };
+
+  const openEdit = (item) => {
+    setEditItem(item);
+    setEditForm({ title: item.title, content: item.content, image_url: item.image_url || "", source: item.source || "web", category: item.category || "general" });
+    setEditOpen(true);
+  };
+
+  const handleEdit = async () => {
+    await ax.put(`/news/${editItem.id}`, editForm);
+    setEditOpen(false);
     onRefresh();
   };
 
   const handleDelete = async (id) => {
+    if (!window.confirm("¿Eliminar noticia?")) return;
     await ax.delete(`/news/${id}`);
     onRefresh();
   };
@@ -303,77 +399,112 @@ function NewsManager({ news, onRefresh }) {
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Nueva Noticia</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <Label className="text-sm">Titulo</Label>
-                <Input value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="mt-1" data-testid="news-title-input" />
-              </div>
-              <div>
-                <Label className="text-sm">Contenido</Label>
-                <Textarea value={form.content} onChange={e => setForm({...form, content: e.target.value})} rows={3} className="mt-1" data-testid="news-content-input" />
-              </div>
-              <div>
-                <Label className="text-sm">URL Imagen</Label>
-                <Input value={form.image_url} onChange={e => setForm({...form, image_url: e.target.value})} className="mt-1" data-testid="news-image-input" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-sm">Fuente</Label>
-                  <Select value={form.source} onValueChange={v => setForm({...form, source: v})}>
-                    <SelectTrigger className="mt-1" data-testid="news-source-select"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="web">Web</SelectItem>
-                      <SelectItem value="instagram">Instagram</SelectItem>
-                      <SelectItem value="facebook">Facebook</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-sm">Categoria</Label>
-                  <Select value={form.category} onValueChange={v => setForm({...form, category: v})}>
-                    <SelectTrigger className="mt-1" data-testid="news-category-select"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="general">General</SelectItem>
-                      <SelectItem value="resultados">Resultados</SelectItem>
-                      <SelectItem value="eventos">Eventos</SelectItem>
-                      <SelectItem value="fichajes">Fichajes</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <Button onClick={handleCreate} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white" data-testid="save-news-btn">Guardar</Button>
-            </div>
+            <NewsForm form={form} setForm={setForm} onSave={handleCreate} saveLabel="Crear noticia" />
           </DialogContent>
         </Dialog>
       </div>
       <div className="space-y-3">
         {news.map(item => (
-          <div key={item.id} className="bg-white rounded-lg border border-[#E2E8F0] p-4 flex items-start justify-between gap-3" data-testid={`news-item-${item.id}`}>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
+          <div key={item.id} className="bg-white rounded-lg border border-[#E2E8F0] p-4 flex items-start gap-3" data-testid={`news-item-${item.id}`}>
+            {item.image_url && (
+              <img
+                src={item.image_url.startsWith("/api/") ? `${process.env.REACT_APP_BACKEND_URL}${item.image_url}` : item.image_url}
+                alt={item.title}
+                className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+                onError={e => { e.target.style.display = "none"; }}
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <h3 className="font-medium text-[#0F172A] text-sm">{item.title}</h3>
                 <Badge className="text-xs bg-[#F4F7FB] text-[#00296B]">{item.category}</Badge>
               </div>
               <p className="text-xs text-[#475569] line-clamp-2">{item.content}</p>
             </div>
-            <Button onClick={() => handleDelete(item.id)} variant="ghost" size="sm" className="text-red-500 hover:text-red-700" data-testid={`delete-news-${item.id}`}>
-              <Trash2 size={14} />
-            </Button>
+            <div className="flex gap-1 flex-shrink-0">
+              <Button onClick={() => openEdit(item)} variant="ghost" size="sm" className="text-[#2460FF] hover:text-[#00296B]">
+                <Edit size={14} />
+              </Button>
+              <Button onClick={() => handleDelete(item.id)} variant="ghost" size="sm" className="text-red-500 hover:text-red-700" data-testid={`delete-news-${item.id}`}>
+                <Trash2 size={14} />
+              </Button>
+            </div>
           </div>
         ))}
+        {news.length === 0 && (
+          <div className="bg-white rounded-xl border border-dashed border-[#E2E8F0] p-10 text-center text-[#94A3B8] text-sm">
+            Sin noticias. Crea la primera con el botón "Nueva Noticia".
+          </div>
+        )}
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Editar Noticia</DialogTitle></DialogHeader>
+          <NewsForm form={editForm} setForm={setEditForm} onSave={handleEdit} saveLabel="Guardar cambios" />
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+const BLANK_TEAM = { name: "", category: "", coach: "", coach_ids: [], image_url: "", description: "", facility_id: "" };
+
+function TeamForm({ form, setForm, coaches, facilities, onSave, saveLabel }) {
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const toggleCoach = (id) => setForm(f => {
+    const ids = f.coach_ids.includes(id) ? f.coach_ids.filter(x => x !== id) : [...f.coach_ids, id];
+    return { ...f, coach_ids: ids };
+  });
+
+  return (
+    <div className="space-y-3">
+      <div><Label className="text-sm">Nombre *</Label><Input value={form.name} onChange={e => set("name", e.target.value)} className="mt-1" /></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-sm">Categoría</Label><Input value={form.category} onChange={e => set("category", e.target.value)} className="mt-1" placeholder="Juvenil, Cadete..." /></div>
+        <div>
+          <Label className="text-sm">Instalación</Label>
+          <Select value={form.facility_id || "_none"} onValueChange={v => set("facility_id", v === "_none" ? "" : v)}>
+            <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Ninguna" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">Sin instalación</SelectItem>
+              {facilities.map(fa => <SelectItem key={fa.id} value={fa.id}>{fa.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div>
+        <Label className="text-sm">Entrenadores del sistema</Label>
+        <div className="mt-1 border border-[#E2E8F0] rounded-lg p-2 max-h-32 overflow-y-auto">
+          {coaches.length === 0
+            ? <p className="text-xs text-[#94A3B8] p-1">No hay entrenadores. Créalos en Usuarios / Acceso.</p>
+            : coaches.map(c => (
+              <label key={c.id} className="flex items-center gap-2 px-1 py-1 hover:bg-[#F4F7FB] rounded cursor-pointer">
+                <input type="checkbox" checked={form.coach_ids.includes(c.id)} onChange={() => toggleCoach(c.id)} />
+                <span className="text-sm">{c.name || c.email}</span>
+              </label>
+            ))
+          }
+        </div>
+        <p className="text-xs text-[#94A3B8] mt-1">O escribe nombre manualmente:</p>
+        <Input value={form.coach} onChange={e => set("coach", e.target.value)} className="mt-1 text-sm" placeholder="Nombre entrenador adicional..." />
+      </div>
+      <div><Label className="text-sm">URL Imagen del equipo</Label><Input value={form.image_url} onChange={e => set("image_url", e.target.value)} className="mt-1" placeholder="https://..." /></div>
+      <div><Label className="text-sm">Descripción</Label><Textarea value={form.description} onChange={e => set("description", e.target.value)} rows={2} className="mt-1" /></div>
+      <Button onClick={onSave} disabled={!form.name} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">{saveLabel}</Button>
     </div>
   );
 }
 
 function TeamsManager({ teams, onRefresh }) {
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTeam, setEditTeam] = useState(null);
   const [coaches, setCoaches] = useState([]);
   const [facilities, setFacilities] = useState([]);
   const [players, setPlayers] = useState([]);
-  const BLANK = { name: "", category: "", coach: "", coach_ids: [], image_url: "", description: "", facility_id: "" };
-  const [form, setForm] = useState(BLANK);
-  const [coachInput, setCoachInput] = useState("");
+  const [form, setForm] = useState({ ...BLANK_TEAM });
+  const [editForm, setEditForm] = useState({ ...BLANK_TEAM });
 
   useEffect(() => {
     Promise.all([
@@ -387,22 +518,27 @@ function TeamsManager({ teams, onRefresh }) {
     });
   }, []);
 
-  const toggleCoach = (id) => {
-    setForm(f => {
-      const ids = f.coach_ids.includes(id) ? f.coach_ids.filter(x => x !== id) : [...f.coach_ids, id];
-      return { ...f, coach_ids: ids };
-    });
+  const buildPayload = (f) => {
+    const coachNames = (f.coach_ids || []).map(id => coaches.find(c => c.id === id)?.name || "").filter(Boolean);
+    return { ...f, coach: coachNames.join(", ") || f.coach };
   };
 
   const handleCreate = async () => {
-    const coachNames = form.coach_ids.map(id => coaches.find(c => c.id === id)?.name || "").filter(Boolean);
-    const payload = {
-      ...form,
-      coach: coachNames.join(", ") || form.coach,
-    };
-    await ax.post("/teams", payload);
+    await ax.post("/teams", buildPayload(form));
     setOpen(false);
-    setForm(BLANK);
+    setForm({ ...BLANK_TEAM });
+    onRefresh();
+  };
+
+  const openEdit = (team) => {
+    setEditTeam(team);
+    setEditForm({ ...BLANK_TEAM, ...team, coach_ids: team.coach_ids || [] });
+    setEditOpen(true);
+  };
+
+  const handleEdit = async () => {
+    await ax.put(`/teams/${editTeam.id}`, buildPayload(editForm));
+    setEditOpen(false);
     onRefresh();
   };
 
@@ -437,44 +573,16 @@ function TeamsManager({ teams, onRefresh }) {
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Nuevo Equipo</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div><Label className="text-sm">Nombre</Label><Input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} className="mt-1" data-testid="team-name-input" /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><Label className="text-sm">Categoría</Label><Input value={form.category} onChange={e => setForm(f => ({...f, category: e.target.value}))} className="mt-1" placeholder="Juvenil, Cadete..." data-testid="team-category-input" /></div>
-                <div>
-                  <Label className="text-sm">Instalación</Label>
-                  <Select value={form.facility_id} onValueChange={v => setForm(f => ({...f, facility_id: v === "_none" ? "" : v}))}>
-                    <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Ninguna" /></SelectTrigger>
-                    <SelectContent><SelectItem value="_none">Sin instalación</SelectItem>{facilities.map(fa => <SelectItem key={fa.id} value={fa.id}>{fa.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div>
-                <Label className="text-sm">Entrenadores (selecciona del sistema)</Label>
-                <div className="mt-1 border border-[#E2E8F0] rounded-lg p-2 max-h-32 overflow-y-auto">
-                  {coaches.length === 0
-                    ? <p className="text-xs text-[#94A3B8] p-1">No hay entrenadores en el sistema. Créalos en Usuarios / Acceso.</p>
-                    : coaches.map(c => (
-                      <label key={c.id} className="flex items-center gap-2 px-1 py-1 hover:bg-[#F4F7FB] rounded cursor-pointer">
-                        <input type="checkbox" checked={form.coach_ids.includes(c.id)} onChange={() => toggleCoach(c.id)} />
-                        <span className="text-sm">{c.name || c.email}</span>
-                      </label>
-                    ))
-                  }
-                </div>
-                <p className="text-xs text-[#94A3B8] mt-1">O escribe nombre manualmente:</p>
-                <Input value={form.coach} onChange={e => setForm(f => ({...f, coach: e.target.value}))} className="mt-1 text-sm" placeholder="Nombre entrenador adicional..." data-testid="team-coach-input" />
-              </div>
-              <div><Label className="text-sm">URL Imagen</Label><Input value={form.image_url} onChange={e => setForm(f => ({...f, image_url: e.target.value}))} className="mt-1" data-testid="team-image-input" /></div>
-              <div><Label className="text-sm">Descripción</Label><Textarea value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} rows={2} className="mt-1" data-testid="team-description-input" /></div>
-              <Button onClick={handleCreate} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white" data-testid="save-team-btn">Guardar equipo</Button>
-            </div>
+            <TeamForm form={form} setForm={setForm} coaches={coaches} facilities={facilities} onSave={handleCreate} saveLabel="Guardar equipo" />
           </DialogContent>
         </Dialog>
       </div>
       <div className="space-y-3">
         {teams.map(team => (
-          <div key={team.id} className="bg-white rounded-xl border border-[#E2E8F0] p-4 flex items-center justify-between gap-4" data-testid={`team-item-${team.id}`}>
+          <div key={team.id} className="bg-white rounded-xl border border-[#E2E8F0] p-4 flex items-center gap-4" data-testid={`team-item-${team.id}`}>
+            {team.image_url && (
+              <img src={team.image_url} alt={team.name} className="w-12 h-12 object-cover rounded-lg flex-shrink-0" onError={e => { e.target.style.display = "none"; }} />
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-medium text-[#0F172A] text-sm">{team.name}</h3>
@@ -484,45 +592,138 @@ function TeamsManager({ teams, onRefresh }) {
               {getCoachNames(team) && <p className="text-xs text-[#475569] mt-0.5">Entrenador: {getCoachNames(team)}</p>}
               {team.facility_id && <p className="text-xs text-[#94A3B8] mt-0.5">{getFacilityName(team.facility_id)}</p>}
             </div>
-            <Button onClick={() => handleDelete(team.id)} variant="ghost" size="sm" className="text-red-500 hover:text-red-700 flex-shrink-0" data-testid={`delete-team-${team.id}`}>
-              <Trash2 size={14} />
-            </Button>
+            <div className="flex gap-1 flex-shrink-0">
+              <Button onClick={() => openEdit(team)} variant="ghost" size="sm" className="text-[#2460FF] hover:text-[#00296B]" data-testid={`edit-team-${team.id}`}>
+                <Edit size={14} />
+              </Button>
+              <Button onClick={() => handleDelete(team.id)} variant="ghost" size="sm" className="text-red-500 hover:text-red-700" data-testid={`delete-team-${team.id}`}>
+                <Trash2 size={14} />
+              </Button>
+            </div>
           </div>
         ))}
+        {teams.length === 0 && (
+          <div className="bg-white rounded-xl border border-dashed border-[#E2E8F0] p-10 text-center text-[#94A3B8] text-sm">
+            Sin equipos. Crea el primero con el botón "Nuevo Equipo".
+          </div>
+        )}
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Editar Equipo</DialogTitle></DialogHeader>
+          <TeamForm form={editForm} setForm={setEditForm} coaches={coaches} facilities={facilities} onSave={handleEdit} saveLabel="Guardar cambios" />
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+const BLANK_MATCH = { home_team_id: "", home_team: "Racing San Gabriel", away_team: "", date: "", time: "", location: "", category: "", result: "", status: "upcoming" };
+
+function MatchForm({ form, setForm, dbTeams, onSave, saveLabel }) {
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const categories = [...new Set(dbTeams.map(t => t.category).filter(Boolean))].sort();
+
+  const applyHomeTeam = (teamId) => {
+    const t = dbTeams.find(x => x.id === teamId);
+    if (t) setForm(f => ({ ...f, home_team_id: teamId, home_team: t.name, category: t.category || f.category }));
+    else set("home_team_id", "");
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label className="text-sm">Equipo local</Label>
+        <Select value={form.home_team_id || "_custom"} onValueChange={applyHomeTeam}>
+          <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Seleccionar equipo del club..." /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_custom">Otro (manual)</SelectItem>
+            {dbTeams.map(t => <SelectItem key={t.id} value={t.id}>{t.name} {t.category ? `(${t.category})` : ""}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {(form.home_team_id === "_custom" || !form.home_team_id) && (
+          <Input value={form.home_team} onChange={e => set("home_team", e.target.value)} className="mt-2" placeholder="Racing San Gabriel" />
+        )}
+      </div>
+      <div><Label className="text-sm">Equipo visitante</Label><Input value={form.away_team} onChange={e => set("away_team", e.target.value)} className="mt-1" /></div>
+      <div>
+        <Label className="text-sm">Categoría</Label>
+        <Select value={categories.includes(form.category) ? form.category : "_custom"} onValueChange={v => set("category", v === "_custom" ? "" : v)}>
+          <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_custom">Otra (manual)</SelectItem>
+            {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {!categories.includes(form.category) && (
+          <Input value={form.category} onChange={e => set("category", e.target.value)} className="mt-2" placeholder="Juvenil, Cadete..." />
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-sm">Fecha</Label><Input type="date" value={form.date} onChange={e => set("date", e.target.value)} className="mt-1" /></div>
+        <div><Label className="text-sm">Hora</Label><Input type="time" value={form.time} onChange={e => set("time", e.target.value)} className="mt-1" /></div>
+      </div>
+      <div><Label className="text-sm">Ubicación / Campo</Label><Input value={form.location} onChange={e => set("location", e.target.value)} className="mt-1" /></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-sm">Estado</Label>
+          <Select value={form.status} onValueChange={v => set("status", v)}>
+            <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="upcoming">Próximo</SelectItem>
+              <SelectItem value="played">Jugado</SelectItem>
+              <SelectItem value="cancelled">Cancelado</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div><Label className="text-sm">Resultado</Label><Input value={form.result} onChange={e => set("result", e.target.value)} className="mt-1" placeholder="2-1" /></div>
+      </div>
+      <div><Label className="text-sm">Observaciones</Label><Textarea value={form.notes || ""} onChange={e => set("notes", e.target.value)} rows={2} className="mt-1" placeholder="Árbitro, incidencias, notas..." /></div>
+      <Button onClick={onSave} disabled={!form.away_team} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">{saveLabel}</Button>
     </div>
   );
 }
 
 function MatchesManager({ matches, onRefresh }) {
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editMatch, setEditMatch] = useState(null);
   const [dbTeams, setDbTeams] = useState([]);
-  const BLANK = { home_team_id: "", home_team: "Racing San Gabriel", away_team: "", date: "", time: "", location: "", category: "", result: "", status: "upcoming" };
-  const [form, setForm] = useState(BLANK);
-  const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [form, setForm] = useState({ ...BLANK_MATCH });
+  const [editForm, setEditForm] = useState({ ...BLANK_MATCH });
 
   useEffect(() => { ax.get("/teams").then(r => setDbTeams(r.data)).catch(() => {}); }, []);
-
-  const applyHomeTeam = (teamId) => {
-    const t = dbTeams.find(x => x.id === teamId);
-    if (t) setForm(f => ({ ...f, home_team_id: teamId, home_team: t.name, category: t.category || f.category }));
-    else setF("home_team_id", "");
-  };
-
-  const categories = [...new Set(dbTeams.map(t => t.category).filter(Boolean))].sort();
 
   const handleCreate = async () => {
     const { home_team_id, ...payload } = form;
     await ax.post("/matches", payload);
     setOpen(false);
-    setForm(BLANK);
+    setForm({ ...BLANK_MATCH });
+    onRefresh();
+  };
+
+  const openEdit = (match) => {
+    setEditMatch(match);
+    setEditForm({ ...BLANK_MATCH, ...match, home_team_id: "" });
+    setEditOpen(true);
+  };
+
+  const handleEdit = async () => {
+    const { home_team_id, ...payload } = editForm;
+    await ax.put(`/matches/${editMatch.id}`, payload);
+    setEditOpen(false);
     onRefresh();
   };
 
   const handleDelete = async (id) => {
+    if (!window.confirm("¿Eliminar partido?")) return;
     await ax.delete(`/matches/${id}`);
     onRefresh();
   };
+
+  const STATUS_LABEL = { upcoming: "Próximo", played: "Jugado", cancelled: "Cancelado" };
+  const STATUS_COLOR = { upcoming: "bg-blue-50 text-blue-700", played: "bg-green-50 text-green-700", cancelled: "bg-gray-100 text-gray-500" };
 
   return (
     <div data-testid="admin-matches-manager">
@@ -539,76 +740,45 @@ function MatchesManager({ matches, onRefresh }) {
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Nuevo Partido</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              {/* Home team from DB or manual */}
-              <div>
-                <Label className="text-sm">Equipo local (Racing San Gabriel)</Label>
-                <Select value={form.home_team_id} onValueChange={applyHomeTeam}>
-                  <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Seleccionar equipo del club..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_custom">Otro (manual)</SelectItem>
-                    {dbTeams.map(t => <SelectItem key={t.id} value={t.id}>{t.name} {t.category ? `(${t.category})` : ""}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                {(form.home_team_id === "_custom" || !form.home_team_id) && (
-                  <Input value={form.home_team} onChange={e => setF("home_team", e.target.value)} className="mt-2" placeholder="Racing San Gabriel" data-testid="match-home-input" />
-                )}
-              </div>
-              <div><Label className="text-sm">Equipo visitante</Label><Input value={form.away_team} onChange={e => setF("away_team", e.target.value)} className="mt-1" data-testid="match-away-input" /></div>
-              {/* Category auto-filled or manual */}
-              <div>
-                <Label className="text-sm">Categoría</Label>
-                <Select value={form.category} onValueChange={v => setF("category", v === "_custom" ? "" : v)}>
-                  <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Seleccionar categoría..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_custom">Otra (manual)</SelectItem>
-                    {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                {(!categories.includes(form.category) || form.category === "") && (
-                  <Input value={form.category} onChange={e => setF("category", e.target.value)} className="mt-2" placeholder="Juvenil, Cadete..." data-testid="match-category-input" />
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><Label className="text-sm">Fecha</Label><Input type="date" value={form.date} onChange={e => setF("date", e.target.value)} className="mt-1" data-testid="match-date-input" /></div>
-                <div><Label className="text-sm">Hora</Label><Input type="time" value={form.time} onChange={e => setF("time", e.target.value)} className="mt-1" data-testid="match-time-input" /></div>
-              </div>
-              <div><Label className="text-sm">Ubicación / Campo</Label><Input value={form.location} onChange={e => setF("location", e.target.value)} className="mt-1" data-testid="match-location-input" /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-sm">Estado</Label>
-                  <Select value={form.status} onValueChange={v => setF("status", v)}>
-                    <SelectTrigger className="mt-1" data-testid="match-status-select"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="upcoming">Próximo</SelectItem>
-                      <SelectItem value="played">Jugado</SelectItem>
-                      <SelectItem value="cancelled">Cancelado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div><Label className="text-sm">Resultado</Label><Input value={form.result} onChange={e => setF("result", e.target.value)} className="mt-1" placeholder="2-1" data-testid="match-result-input" /></div>
-              </div>
-              <Button onClick={handleCreate} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white" data-testid="save-match-btn">Guardar partido</Button>
-            </div>
+            <MatchForm form={form} setForm={setForm} dbTeams={dbTeams} onSave={handleCreate} saveLabel="Guardar partido" />
           </DialogContent>
         </Dialog>
       </div>
       <div className="space-y-3">
         {matches.map(match => (
-          <div key={match.id} className="bg-white rounded-lg border border-[#E2E8F0] p-4 flex items-center justify-between" data-testid={`match-item-${match.id}`}>
-            <div>
-              <h3 className="font-medium text-[#0F172A] text-sm">{match.home_team} vs {match.away_team}</h3>
-              <p className="text-xs text-[#475569]">{match.date} {match.time} - {match.location}</p>
+          <div key={match.id} className="bg-white rounded-lg border border-[#E2E8F0] p-4 flex items-center gap-3" data-testid={`match-item-${match.id}`}>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-medium text-[#0F172A] text-sm">{match.home_team} vs {match.away_team}</h3>
+                {match.category && <span className="text-xs bg-[#F4F7FB] text-[#00296B] px-2 py-0.5 rounded-full">{match.category}</span>}
+                <Badge className={`text-xs ${STATUS_COLOR[match.status] || ""}`}>{STATUS_LABEL[match.status] || match.status}</Badge>
+              </div>
+              <p className="text-xs text-[#475569] mt-0.5">{match.date}{match.time ? ` · ${match.time}` : ""}{match.location ? ` · ${match.location}` : ""}</p>
             </div>
-            <div className="flex items-center gap-2">
-              {match.result && <Badge className="bg-green-50 text-green-700 text-xs">{match.result}</Badge>}
-              <Button onClick={() => handleDelete(match.id)} variant="ghost" size="sm" className="text-red-500 hover:text-red-700" data-testid={`delete-match-${match.id}`}>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {match.result && <Badge className="bg-green-50 text-green-700 text-xs font-bold">{match.result}</Badge>}
+              <Button onClick={() => openEdit(match)} variant="ghost" size="sm" className="text-[#2460FF] h-8 w-8 p-0">
+                <Edit size={14} />
+              </Button>
+              <Button onClick={() => handleDelete(match.id)} variant="ghost" size="sm" className="text-red-500 h-8 w-8 p-0" data-testid={`delete-match-${match.id}`}>
                 <Trash2 size={14} />
               </Button>
             </div>
           </div>
         ))}
+        {matches.length === 0 && (
+          <div className="bg-white rounded-xl border border-dashed border-[#E2E8F0] p-10 text-center text-[#94A3B8] text-sm">
+            Sin partidos registrados. Crea el primero con "Nuevo Partido".
+          </div>
+        )}
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Editar Partido</DialogTitle></DialogHeader>
+          <MatchForm form={editForm} setForm={setEditForm} dbTeams={dbTeams} onSave={handleEdit} saveLabel="Guardar cambios" />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
