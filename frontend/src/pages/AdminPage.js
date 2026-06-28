@@ -36,12 +36,14 @@ import GdprManager from "../components/admin/GdprManager";
 import PatrocinadoresManager from "../components/admin/PatrocinadoresManager";
 import StaffManager from "../components/admin/StaffManager";
 import ContabilidadManager from "../components/admin/ContabilidadManager";
+import InscripcionesManager from "../components/admin/InscripcionesManager";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const ax = axios.create({ baseURL: API, withCredentials: true });
 
 const sidebarItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "inscripciones", label: "Inscripciones", icon: CheckCircle, highlight: true },
   { id: "deportistas", label: "Deportistas", icon: UsersRound, highlight: true },
   { id: "staff", label: "Personal del Club", icon: UserCheck, highlight: true },
   { id: "equipos", label: "Equipos", icon: Users, highlight: true },
@@ -149,6 +151,7 @@ export default function AdminPage() {
       {/* Content */}
       <main className="flex-1 p-4 lg:p-8 overflow-auto" data-testid="admin-content">
         {section === "dashboard" && <DashboardSection news={news} teams={teams} matches={matches} contacts={contacts} playerCount={playerCount} memberCount={memberCount} />}
+        {section === "inscripciones" && <InscripcionesManager />}
         {section === "deportistas" && <DeportistasManager />}
         {section === "staff" && <StaffManager />}
         {section === "equipos" && <TeamsManager teams={teams} onRefresh={loadData} />}
