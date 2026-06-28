@@ -3626,6 +3626,91 @@ async def export_fees(request: Request):
                              headers={"Content-Disposition": "attachment; filename=tarifas.xlsx"})
 
 
+@api_router.get("/export/informe-completo")
+async def export_informe_completo(request: Request):
+    club_id = await get_club_id_from_request(request)
+    wb = openpyxl.Workbook()
+    header_fill = PatternFill("solid", fgColor="00296B")
+    header_font = Font(bold=True, color="FFFFFF")
+
+    def add_sheet(title, headers, rows):
+        if wb.active and wb.active.title == "Sheet":
+            ws = wb.active
+            ws.title = title[:31]
+        else:
+            ws = wb.create_sheet(title=title[:31])
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=h)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center")
+        for ri, row in enumerate(rows, 2):
+            for ci, val in enumerate(row, 1):
+                ws.cell(row=ri, column=ci, value=val)
+        for col in ws.columns:
+            max_len = max((len(str(c.value or "")) for c in col), default=8)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+    teams_list = await db.teams.find({"club_id": club_id}, {"_id": 0}).to_list(200)
+    teams_map = {t["id"]: t["name"] for t in teams_list}
+
+    # Sheet 1: Jugadores
+    players = await db.players.find({"club_id": club_id}, {"_id": 0}).sort("surname", 1).to_list(5000)
+    add_sheet("Jugadores", ["Apellidos", "Nombre", "Email", "Teléfono", "F. Nac.", "Equipo", "Estado", "IBAN"], [
+        [p.get("surname",""), p.get("name",""), p.get("email",""), p.get("phone",""),
+         p.get("birthdate",""), teams_map.get(p.get("team_id",""),""), p.get("status",""), p.get("bank_iban","")]
+        for p in players
+    ])
+
+    # Sheet 2: Socios
+    members = await db.members.find({"club_id": club_id}, {"_id": 0}).sort("surname", 1).to_list(5000)
+    add_sheet("Socios", ["Apellidos", "Nombre", "Email", "Teléfono", "NIF", "Estado", "F. Alta"], [
+        [m.get("surname",""), m.get("name",""), m.get("email",""), m.get("phone",""),
+         m.get("nif",""), m.get("status",""), m.get("join_date","")]
+        for m in members
+    ])
+
+    # Sheet 3: Ventas
+    sales = await db.sales.find({"club_id": club_id}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    fees_map = {f["id"]: f["name"] for f in await db.fees.find({"club_id": club_id}, {"_id": 0}).to_list(500)}
+    add_sheet("Ventas", ["Fecha", "Concepto", "Tarifa", "Importe (€)", "Estado", "Pagado"], [
+        [s.get("created_at","")[:10], s.get("concept",""), fees_map.get(s.get("fee_id",""),""),
+         s.get("amount",0), s.get("status",""), "Sí" if s.get("paid") else "No"]
+        for s in sales
+    ])
+
+    # Sheet 4: Staff
+    staff = await db.staff.find({"club_id": club_id}, {"_id": 0}).sort("surname", 1).to_list(1000)
+    add_sheet("Personal", ["Apellidos", "Nombre", "Rol", "Email", "Teléfono", "DNI", "Activo"], [
+        [s.get("surname",""), s.get("name",""), s.get("role",""), s.get("email",""),
+         s.get("phone",""), s.get("dni",""), "Sí" if s.get("active",True) else "No"]
+        for s in staff
+    ])
+
+    # Sheet 5: Contabilidad
+    entries = await db.accounting.find({"club_id": club_id}, {"_id": 0}).sort("date", -1).to_list(5000)
+    add_sheet("Contabilidad", ["Fecha", "Tipo", "Categoría", "Concepto", "Importe (€)", "Método pago", "Referencia"], [
+        [e.get("date",""), e.get("type",""), e.get("category",""), e.get("concept",""),
+         e.get("amount",0), e.get("payment_method",""), e.get("reference","")]
+        for e in entries
+    ])
+
+    # Sheet 6: Tarifas
+    fees = await db.fees.find({"club_id": club_id}, {"_id": 0}).sort("name", 1).to_list(500)
+    add_sheet("Tarifas", ["Nombre", "Descripción", "Importe (€)", "Tipo", "Equipo", "Activa"], [
+        [f.get("name",""), f.get("description",""), f.get("amount",0), f.get("fee_type",""),
+         teams_map.get(f.get("team_id",""),""), "Sí" if f.get("active",True) else "No"]
+        for f in fees
+    ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fecha = datetime.now().strftime("%Y%m%d")
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=informe_club_{fecha}.xlsx"})
+
+
 @api_router.post("/fees/import")
 async def import_fees(request: Request, file: UploadFile = File(...)):
     club_id = await get_club_id_from_request(request)

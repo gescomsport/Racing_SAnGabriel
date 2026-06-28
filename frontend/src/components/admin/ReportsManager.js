@@ -223,10 +223,23 @@ export default function ReportsManager() {
           <h2 className="font-heading font-bold text-[#00296B] text-xl">Informes y Exportaciones</h2>
           <p className="text-sm text-[#475569] mt-0.5">Analítica completa del club · Exporta cualquier tabla a Excel/CSV</p>
         </div>
-        <Button onClick={loadSummary} variant="outline" size="sm" disabled={loading} className="text-[#475569]">
-          <RefreshCw size={14} className={`mr-1 ${loading ? "animate-spin" : ""}`} />
-          Actualizar
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={async () => {
+            try {
+              const res = await ax.get("/export/informe-completo", { responseType: "blob" });
+              const url = window.URL.createObjectURL(new Blob([res.data]));
+              const a = document.createElement("a"); a.href = url;
+              a.download = `informe_club_${new Date().toISOString().slice(0,10)}.xlsx`; a.click();
+              window.URL.revokeObjectURL(url);
+            } catch { alert("Error al exportar informe"); }
+          }} className="bg-green-600 hover:bg-green-700 text-white text-sm">
+            <FileSpreadsheet size={14} className="mr-1.5" />Exportar Informe Completo
+          </Button>
+          <Button onClick={loadSummary} variant="outline" size="sm" disabled={loading} className="text-[#475569]">
+            <RefreshCw size={14} className={`mr-1 ${loading ? "animate-spin" : ""}`} />
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       {/* KPIs */}
