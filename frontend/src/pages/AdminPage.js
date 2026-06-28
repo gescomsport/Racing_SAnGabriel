@@ -37,6 +37,7 @@ import PatrocinadoresManager from "../components/admin/PatrocinadoresManager";
 import StaffManager from "../components/admin/StaffManager";
 import ContabilidadManager from "../components/admin/ContabilidadManager";
 import InscripcionesManager from "../components/admin/InscripcionesManager";
+import CoachPortal from "../components/admin/CoachPortal";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const ax = axios.create({ baseURL: API, withCredentials: true });
@@ -109,6 +110,11 @@ export default function AdminPage() {
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><p>Cargando...</p></div>;
   if (!user) return null;
+
+  const isCoach = ["entrenador", "auxiliar"].includes(user.role);
+  if (isCoach) {
+    return <CoachPortal user={user} onLogout={handleLogout} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#F4F7FB] flex" data-testid="admin-page">

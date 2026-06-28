@@ -130,6 +130,7 @@ class TeamCreate(BaseModel):
     image_url: Optional[str] = ""
     description: Optional[str] = ""
     facility_id: Optional[str] = ""
+    color: Optional[str] = "#2460FF"
 
 class PlayerCreate(BaseModel):
     name: str
@@ -3010,6 +3011,23 @@ async def get_schedule_events(
     if event_type:
         query["event_type"] = event_type
     events = await db.schedule_events.find(query, {"_id": 0}).sort("date", 1).to_list(5000)
+    if date_from:
+        events = [e for e in events if e.get("date","") >= date_from]
+    if date_to:
+        events = [e for e in events if e.get("date","") <= date_to]
+    return events
+
+@api_router.get("/schedule/events/public")
+async def get_schedule_events_public(
+    club_id: str = "racing_sangabriel",
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    team_id: Optional[str] = None,
+):
+    query: dict = {"club_id": club_id}
+    if team_id:
+        query["team_id"] = team_id
+    events = await db.schedule_events.find(query, {"_id": 0}).sort("date", 1).to_list(500)
     if date_from:
         events = [e for e in events if e.get("date","") >= date_from]
     if date_to:
