@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { Download, Search, Filter, X, ChevronDown, ChevronUp, Users, Shield, Star, Plus, Edit2, Trash2, CheckCircle, Clock, XCircle } from "lucide-react";
+import DocumentUploader from "./DocumentUploader";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -529,7 +530,17 @@ function DeportistasTab() {
                           <div><p className="text-xs text-[#94A3B8] mb-1">Dirección</p><p className="font-medium">{[p.address, p.city, p.postal_code].filter(Boolean).join(", ") || "—"}</p></div>
                           <div><p className="text-xs text-[#94A3B8] mb-1">Grupo sanguíneo</p><p className="font-medium">{p.blood_type || "—"}</p></div>
                           <div><p className="text-xs text-[#94A3B8] mb-1">Notas médicas</p><p className="font-medium">{p.medical_notes || "—"}</p></div>
-                          <div><p className="text-xs text-[#94A3B8] mb-1">ID Familiar</p><p className="font-medium font-mono text-xs">{p.family_id || "—"}</p></div>
+                          <div><p className="text-xs text-[#94A3B8] mb-1">IBAN</p><p className="font-medium font-mono text-xs">{p.bank_iban || "—"}</p></div>
+                        </div>
+                        <div className="mb-4">
+                          <DocumentUploader
+                            personType="players"
+                            personId={p.id}
+                            data={p}
+                            onUpdated={(field, url) => {
+                              setPlayers(prev => prev.map(pl => pl.id === p.id ? { ...pl, [field]: url } : pl));
+                            }}
+                          />
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {Object.keys(STATUS_LABELS).map(s => (
@@ -674,6 +685,16 @@ function TutoresTab() {
                         <div><p className="text-xs text-[#94A3B8] mb-1">Email</p><p>{g.email || "—"}</p></div>
                         <div><p className="text-xs text-[#94A3B8] mb-1">Dirección</p><p>{[g.address, g.city].filter(Boolean).join(", ") || "—"}</p></div>
                         <div><p className="text-xs text-[#94A3B8] mb-1">IBAN</p><p className="font-mono text-xs">{g.bank_iban || "—"}</p></div>
+                      </div>
+                      <div className="mb-3">
+                        <DocumentUploader
+                          personType="guardians"
+                          personId={g.id}
+                          data={g}
+                          onUpdated={(field, url) => {
+                            setGuardians(prev => prev.map(x => x.id === g.id ? { ...x, [field]: url } : x));
+                          }}
+                        />
                       </div>
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" className="text-red-500 border-red-200 text-xs"
@@ -855,6 +876,16 @@ function SociosTab() {
                         <div><p className="text-xs text-[#94A3B8] mb-1">Teléfono</p><p>{m.phone || "—"}</p></div>
                         <div><p className="text-xs text-[#94A3B8] mb-1">Dirección</p><p>{[m.address, m.city].filter(Boolean).join(", ") || "—"}</p></div>
                         <div><p className="text-xs text-[#94A3B8] mb-1">IBAN</p><p className="font-mono text-xs">{m.bank_iban || "—"}</p></div>
+                      </div>
+                      <div className="mb-3">
+                        <DocumentUploader
+                          personType="members"
+                          personId={m.id}
+                          data={m}
+                          onUpdated={(field, url) => {
+                            setMembers(prev => prev.map(x => x.id === m.id ? { ...x, [field]: url } : x));
+                          }}
+                        />
                       </div>
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" className={`text-xs ${m.status === "active" ? "text-slate-600" : "text-green-600"}`}

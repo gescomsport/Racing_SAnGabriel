@@ -156,6 +156,10 @@ class PlayerCreate(BaseModel):
     family_id: Optional[str] = ""
     # Bancario
     bank_iban: Optional[str] = ""
+    # Documentos
+    photo_url: Optional[str] = ""
+    dni_front_url: Optional[str] = ""
+    dni_back_url: Optional[str] = ""
     # Estado
     status: Optional[str] = "active"
     notes: Optional[str] = ""
@@ -172,6 +176,9 @@ class GuardianCreate(BaseModel):
     player_ids: Optional[List[str]] = []
     family_id: Optional[str] = ""
     bank_iban: Optional[str] = ""
+    photo_url: Optional[str] = ""
+    dni_front_url: Optional[str] = ""
+    dni_back_url: Optional[str] = ""
     notes: Optional[str] = ""
 
 class GuardianUpdate(BaseModel):
@@ -186,6 +193,9 @@ class GuardianUpdate(BaseModel):
     player_ids: Optional[List[str]] = None
     family_id: Optional[str] = None
     bank_iban: Optional[str] = None
+    photo_url: Optional[str] = None
+    dni_front_url: Optional[str] = None
+    dni_back_url: Optional[str] = None
     notes: Optional[str] = None
 
 class MemberCreate(BaseModel):
@@ -201,6 +211,8 @@ class MemberCreate(BaseModel):
     member_type: Optional[str] = "socio_adulto"
     bank_iban: Optional[str] = ""
     photo_url: Optional[str] = ""
+    dni_front_url: Optional[str] = ""
+    dni_back_url: Optional[str] = ""
     status: Optional[str] = "active"
     season: Optional[str] = "2025/2026"
     notes: Optional[str] = ""
@@ -218,6 +230,8 @@ class MemberUpdate(BaseModel):
     member_type: Optional[str] = None
     bank_iban: Optional[str] = None
     photo_url: Optional[str] = None
+    dni_front_url: Optional[str] = None
+    dni_back_url: Optional[str] = None
     status: Optional[str] = None
     season: Optional[str] = None
     notes: Optional[str] = None
@@ -337,7 +351,17 @@ class GalleryCreate(BaseModel):
     description: Optional[str] = ""
     category: Optional[str] = "general"
     section: Optional[str] = "galeria"  # hero|equipos|instalaciones|galeria|patrocinadores|noticias
+    team_id: Optional[str] = ""
+    facility_id: Optional[str] = ""
     visible: Optional[bool] = True
+
+class GalleryUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    section: Optional[str] = None
+    team_id: Optional[str] = None
+    facility_id: Optional[str] = None
+    visible: Optional[bool] = None
 
 class ContactCreate(BaseModel):
     name: str
@@ -959,6 +983,8 @@ async def upload_gallery_image(
     title: str = Form(""),
     section: str = Form("galeria"),
     description: str = Form(""),
+    team_id: str = Form(""),
+    facility_id: str = Form(""),
 ):
     """Upload an image file and create a gallery item."""
     club_id = await get_club_id_from_request(request)
@@ -985,6 +1011,8 @@ async def upload_gallery_image(
         "description": description,
         "section": section,
         "category": section,
+        "team_id": team_id or "",
+        "facility_id": facility_id or "",
         "visible": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -993,14 +1021,14 @@ async def upload_gallery_image(
 
 @api_router.post("/upload")
 async def upload_file(request: Request, file: UploadFile = File(...)):
-    """Upload any image file and return its URL (no gallery entry created)."""
+    """Upload any image or PDF file and return its URL (no gallery entry created)."""
     await get_current_user(request)
     import os
     content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Imagen demasiado grande (máx 10 MB)")
-    ext = (file.filename or "img.jpg").rsplit(".", 1)[-1].lower()
-    if ext not in ("jpg", "jpeg", "png", "gif", "webp", "svg"):
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Archivo demasiado grande (máx 20 MB)")
+    ext = (file.filename or "file.jpg").rsplit(".", 1)[-1].lower()
+    if ext not in ("jpg", "jpeg", "png", "gif", "webp", "svg", "pdf"):
         raise HTTPException(status_code=400, detail="Formato no permitido")
     upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
     os.makedirs(upload_dir, exist_ok=True)
@@ -1008,6 +1036,75 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
     with open(os.path.join(upload_dir, filename), "wb") as f:
         f.write(content)
     return {"url": f"/api/uploads/{filename}"}
+
+@api_router.post("/players/{player_id}/upload-doc")
+async def upload_player_doc(player_id: str, doc_type: str, request: Request, file: UploadFile = File(...)):
+    """Upload photo, dni_front or dni_back for a player. doc_type: photo|dni_front|dni_back"""
+    club_id = await get_club_id_from_request(request)
+    import os
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Archivo demasiado grande")
+    ext = (file.filename or "file.jpg").rsplit(".", 1)[-1].lower()
+    if ext not in ("jpg", "jpeg", "png", "webp", "pdf"):
+        raise HTTPException(status_code=400, detail="Formato no permitido")
+    upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"{uuid.uuid4()}.{ext}"
+    with open(os.path.join(upload_dir, filename), "wb") as f:
+        f.write(content)
+    url = f"/api/uploads/{filename}"
+    field = {"photo": "photo_url", "dni_front": "dni_front_url", "dni_back": "dni_back_url"}.get(doc_type)
+    if not field:
+        raise HTTPException(status_code=400, detail="doc_type inválido")
+    await db.players.update_one({"id": player_id, "club_id": club_id}, {"$set": {field: url}})
+    return {"url": url, "field": field}
+
+@api_router.post("/guardians/{guardian_id}/upload-doc")
+async def upload_guardian_doc(guardian_id: str, doc_type: str, request: Request, file: UploadFile = File(...)):
+    """Upload photo, dni_front or dni_back for a guardian."""
+    club_id = await get_club_id_from_request(request)
+    import os
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Archivo demasiado grande")
+    ext = (file.filename or "file.jpg").rsplit(".", 1)[-1].lower()
+    if ext not in ("jpg", "jpeg", "png", "webp", "pdf"):
+        raise HTTPException(status_code=400, detail="Formato no permitido")
+    upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"{uuid.uuid4()}.{ext}"
+    with open(os.path.join(upload_dir, filename), "wb") as f:
+        f.write(content)
+    url = f"/api/uploads/{filename}"
+    field = {"photo": "photo_url", "dni_front": "dni_front_url", "dni_back": "dni_back_url"}.get(doc_type)
+    if not field:
+        raise HTTPException(status_code=400, detail="doc_type inválido")
+    await db.guardians.update_one({"id": guardian_id, "club_id": club_id}, {"$set": {field: url}})
+    return {"url": url, "field": field}
+
+@api_router.post("/members/{member_id}/upload-doc")
+async def upload_member_doc(member_id: str, doc_type: str, request: Request, file: UploadFile = File(...)):
+    """Upload photo, dni_front or dni_back for a member/socio."""
+    club_id = await get_club_id_from_request(request)
+    import os
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Archivo demasiado grande")
+    ext = (file.filename or "file.jpg").rsplit(".", 1)[-1].lower()
+    if ext not in ("jpg", "jpeg", "png", "webp", "pdf"):
+        raise HTTPException(status_code=400, detail="Formato no permitido")
+    upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"{uuid.uuid4()}.{ext}"
+    with open(os.path.join(upload_dir, filename), "wb") as f:
+        f.write(content)
+    url = f"/api/uploads/{filename}"
+    field = {"photo": "photo_url", "dni_front": "dni_front_url", "dni_back": "dni_back_url"}.get(doc_type)
+    if not field:
+        raise HTTPException(status_code=400, detail="doc_type inválido")
+    await db.members.update_one({"id": member_id, "club_id": club_id}, {"$set": {field: url}})
+    return {"url": url, "field": field}
 
 @api_router.get("/uploads/{filename}")
 async def serve_upload(filename: str):

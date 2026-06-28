@@ -793,24 +793,43 @@ const GALLERY_SECTIONS = [
   { id: "noticias",       label: "Noticias",       color: "bg-orange-100 text-orange-700",      dot: "#ea580c", desc: "Imágenes para artículos y noticias" },
 ];
 
+const SECTION_SIZES = {
+  hero: "1920×1080px — Horizontal apaisado. Mínimo 1280px de ancho.",
+  equipos: "800×600px — Foto de grupo. Horizontal o cuadrada.",
+  instalaciones: "1200×800px — Foto del campo o pabellón.",
+  galeria: "Cualquier tamaño. Se recomienda mínimo 800px.",
+  patrocinadores: "400×200px — Fondo blanco o transparente (PNG). Logo horizontal.",
+  noticias: "1200×630px — Horizontal (proporción 1.91:1 ideal para redes).",
+};
+
 function GalleryManager({ onRefresh }) {
   const [items, setItems] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [facilities, setFacilities] = useState([]);
   const [activeSection, setActiveSection] = useState("all");
+  const [filterTeam, setFilterTeam] = useState("");
   const [open, setOpen] = useState(false);
-  const [uploadMode, setUploadMode] = useState("file"); // "file" | "url"
+  const [uploadMode, setUploadMode] = useState("file");
   const [uploading, setUploading] = useState(false);
   const [filePreview, setFilePreview] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [form, setForm] = useState({ title: "", image_url: "", description: "", section: "galeria" });
+  const [form, setForm] = useState({ title: "", image_url: "", description: "", section: "galeria", team_id: "", facility_id: "" });
+  const [editOpen, setEditOpen] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [editForm, setEditForm] = useState({});
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const setEF = (k, v) => setEditForm(f => ({ ...f, [k]: v }));
 
-  const load = async (section) => {
-    const q = section && section !== "all" ? `?section=${section}` : "";
-    const r = await ax.get(`/gallery${q}`);
+  const load = async () => {
+    const r = await ax.get("/gallery");
     setItems(r.data);
   };
 
-  useEffect(() => { load(activeSection); }, [activeSection]);
+  useEffect(() => {
+    load();
+    ax.get("/teams").then(r => setTeams(r.data)).catch(() => {});
+    ax.get("/facilities").then(r => setFacilities(r.data)).catch(() => {});
+  }, []);
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
@@ -829,42 +848,63 @@ function GalleryManager({ onRefresh }) {
         fd.append("title", form.title || selectedFile.name);
         fd.append("section", form.section);
         fd.append("description", form.description);
+        fd.append("team_id", form.team_id || "");
+        fd.append("facility_id", form.facility_id || "");
         await ax.post("/gallery/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
       } else {
         await ax.post("/gallery", { ...form });
       }
       setOpen(false);
-      setForm({ title: "", image_url: "", description: "", section: "galeria" });
+      setForm({ title: "", image_url: "", description: "", section: "galeria", team_id: "", facility_id: "" });
       setSelectedFile(null);
       setFilePreview(null);
-      load(activeSection);
+      load();
       onRefresh();
     } finally {
       setUploading(false);
     }
   };
 
+  const openEdit = (item) => {
+    setEditItem(item);
+    setEditForm({ title: item.title || "", description: item.description || "", section: item.section || "galeria", team_id: item.team_id || "", facility_id: item.facility_id || "" });
+    setEditOpen(true);
+  };
+
+  const handleEdit = async () => {
+    await ax.put(`/gallery/${editItem.id}`, editForm);
+    setEditOpen(false);
+    load();
+  };
+
   const handleDelete = async (id) => {
     if (!window.confirm("¿Eliminar imagen?")) return;
     await ax.delete(`/gallery/${id}`);
-    load(activeSection);
+    load();
     onRefresh();
   };
 
   const handleToggleVisible = async (item) => {
     await ax.put(`/gallery/${item.id}`, { visible: !item.visible });
-    load(activeSection);
+    load();
   };
 
   const secInfo = (secId) => GALLERY_SECTIONS.find(s => s.id === secId) || GALLERY_SECTIONS[0];
-  const filtered = activeSection === "all" ? items : items.filter(i => i.section === activeSection);
+
+  const filtered = items.filter(i => {
+    if (activeSection !== "all" && i.section !== activeSection) return false;
+    if (filterTeam && i.team_id !== filterTeam) return false;
+    return true;
+  });
+
+  const resolveImg = (url) => url?.startsWith("/api/") ? `${process.env.REACT_APP_BACKEND_URL}${url}` : url;
 
   return (
     <div data-testid="admin-gallery-manager">
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>
           <h2 className="font-heading font-bold text-[#00296B] text-xl">Galería de Imágenes</h2>
-          <p className="text-sm text-[#475569]">Sube y organiza las fotos de cada sección de la web</p>
+          <p className="text-sm text-[#475569]">Organiza las fotos por sección, equipo e instalación</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -872,10 +912,9 @@ function GalleryManager({ onRefresh }) {
               <Plus size={16} className="mr-1" /> Añadir imagen
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Nueva imagen</DialogTitle></DialogHeader>
             <div className="space-y-4">
-              {/* Sección destino */}
               <div>
                 <Label className="text-sm">¿Dónde aparece en la web? *</Label>
                 <div className="grid grid-cols-2 gap-2 mt-2">
@@ -886,12 +925,38 @@ function GalleryManager({ onRefresh }) {
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.dot }}></span>
                         {s.label}
                       </div>
-                      {form.section === s.id && <p className="text-[#475569] font-normal leading-tight">{s.desc}</p>}
                     </button>
                   ))}
                 </div>
+                {SECTION_SIZES[form.section] && (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+                    📐 Tamaño recomendado: {SECTION_SIZES[form.section]}
+                  </p>
+                )}
               </div>
-              {/* Modo subida */}
+              {/* Asociar a equipo o instalación */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm">Equipo (opcional)</Label>
+                  <Select value={form.team_id || "_none"} onValueChange={v => set("team_id", v === "_none" ? "" : v)}>
+                    <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Sin equipo" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Sin equipo</SelectItem>
+                      {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-sm">Instalación (opcional)</Label>
+                  <Select value={form.facility_id || "_none"} onValueChange={v => set("facility_id", v === "_none" ? "" : v)}>
+                    <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Sin instalación" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Sin instalación</SelectItem>
+                      {facilities.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="flex gap-2">
                 <button onClick={() => setUploadMode("file")} className={`flex-1 py-2 rounded-lg text-sm font-bold border-2 transition-all ${uploadMode === "file" ? "border-[#2460FF] bg-blue-50 text-[#2460FF]" : "border-[#E2E8F0] text-[#475569]"}`}>
                   📂 Subir archivo
@@ -901,24 +966,23 @@ function GalleryManager({ onRefresh }) {
                 </button>
               </div>
               {uploadMode === "file" ? (
-                <div>
-                  <label className="block w-full border-2 border-dashed border-[#E2E8F0] rounded-xl p-4 text-center cursor-pointer hover:border-[#2460FF] transition-colors">
-                    {filePreview ? (
-                      <img src={filePreview} alt="preview" className="h-36 mx-auto object-contain rounded-lg mb-2" />
-                    ) : (
-                      <div className="py-4 text-[#94A3B8]">
-                        <div className="text-3xl mb-2">🖼️</div>
-                        <p className="text-sm">Haz clic para seleccionar imagen</p>
-                        <p className="text-xs mt-1">JPG, PNG, WEBP hasta 10 MB</p>
-                      </div>
-                    )}
-                    <input type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
-                  </label>
-                </div>
+                <label className="block w-full border-2 border-dashed border-[#E2E8F0] rounded-xl p-4 text-center cursor-pointer hover:border-[#2460FF] transition-colors">
+                  {filePreview ? (
+                    <img src={filePreview} alt="preview" className="h-36 mx-auto object-contain rounded-lg mb-2" />
+                  ) : (
+                    <div className="py-4 text-[#94A3B8]">
+                      <div className="text-3xl mb-2">🖼️</div>
+                      <p className="text-sm">Haz clic para seleccionar imagen</p>
+                      <p className="text-xs mt-1">JPG, PNG, WEBP hasta 10 MB</p>
+                    </div>
+                  )}
+                  <input type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
+                </label>
               ) : (
                 <div><Label className="text-sm">URL de la imagen</Label><Input value={form.image_url} onChange={e => set("image_url", e.target.value)} className="mt-1" placeholder="https://..." /></div>
               )}
-              <div><Label className="text-sm">Título / descripción</Label><Input value={form.title} onChange={e => set("title", e.target.value)} className="mt-1" placeholder="Ej: Partido Prebenjamín vs Elche" /></div>
+              <div><Label className="text-sm">Título</Label><Input value={form.title} onChange={e => set("title", e.target.value)} className="mt-1" placeholder="Ej: Partido Prebenjamín vs Elche" /></div>
+              <div><Label className="text-sm">Descripción</Label><Input value={form.description} onChange={e => set("description", e.target.value)} className="mt-1" placeholder="Opcional" /></div>
               <Button onClick={handleSave} disabled={uploading || (uploadMode === "file" && !selectedFile) || (uploadMode === "url" && !form.image_url)} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white" data-testid="save-gallery-btn">
                 {uploading ? "Subiendo..." : "Guardar imagen"}
               </Button>
@@ -927,8 +991,8 @@ function GalleryManager({ onRefresh }) {
         </Dialog>
       </div>
 
-      {/* Filtros por sección */}
-      <div className="flex gap-2 flex-wrap mb-5">
+      {/* Filtros */}
+      <div className="flex gap-2 flex-wrap mb-3">
         {GALLERY_SECTIONS.map(s => (
           <button key={s.id} onClick={() => setActiveSection(s.id)}
             className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${activeSection === s.id ? "bg-[#00296B] text-white border-[#00296B]" : "bg-white text-[#475569] border-[#E2E8F0] hover:border-[#00296B]"}`}>
@@ -938,40 +1002,57 @@ function GalleryManager({ onRefresh }) {
         ))}
       </div>
 
-      {/* Info de sección activa */}
-      {activeSection !== "all" && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4 flex items-center gap-3">
-          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: secInfo(activeSection).dot }}></span>
-          <div>
-            <p className="text-sm font-bold text-[#00296B]">{secInfo(activeSection).label}</p>
-            <p className="text-xs text-[#475569]">{secInfo(activeSection).desc}</p>
-          </div>
+      {/* Filtro por equipo */}
+      {teams.length > 0 && (
+        <div className="flex gap-2 flex-wrap mb-4 items-center">
+          <span className="text-xs text-[#94A3B8] font-medium">Equipo:</span>
+          <button onClick={() => setFilterTeam("")} className={`px-2 py-1 rounded-full text-xs border transition-all ${!filterTeam ? "bg-[#2460FF] text-white border-[#2460FF]" : "bg-white text-[#475569] border-[#E2E8F0] hover:border-[#2460FF]"}`}>Todos</button>
+          {teams.map(t => (
+            <button key={t.id} onClick={() => setFilterTeam(filterTeam === t.id ? "" : t.id)}
+              className={`px-2 py-1 rounded-full text-xs border transition-all ${filterTeam === t.id ? "bg-[#2460FF] text-white border-[#2460FF]" : "bg-white text-[#475569] border-[#E2E8F0] hover:border-[#2460FF]"}`}>
+              {t.name}
+            </button>
+          ))}
         </div>
       )}
 
-      {/* Grid de imágenes */}
+      {/* Tamaño recomendado de sección activa */}
+      {activeSection !== "all" && SECTION_SIZES[activeSection] && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-4 flex items-center gap-2">
+          <span className="text-amber-600">📐</span>
+          <p className="text-xs text-amber-800"><strong>Tamaño recomendado:</strong> {SECTION_SIZES[activeSection]}</p>
+        </div>
+      )}
+
+      {/* Grid */}
       {filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-dashed border-[#E2E8F0] p-12 text-center text-[#94A3B8]">
           <div className="text-4xl mb-3">🖼️</div>
-          <p className="font-medium">No hay imágenes en esta sección</p>
+          <p className="font-medium">No hay imágenes con estos filtros</p>
           <p className="text-sm mt-1">Haz clic en "Añadir imagen" para subir la primera</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {filtered.map(item => {
             const sec = secInfo(item.section);
+            const teamName = teams.find(t => t.id === item.team_id)?.name;
             return (
               <div key={item.id} className={`bg-white rounded-xl border overflow-hidden transition-all ${item.visible !== false ? "border-[#E2E8F0]" : "border-dashed border-[#E2E8F0] opacity-50"}`} data-testid={`gallery-admin-item-${item.id}`}>
                 <div className="relative">
-                  <img src={item.image_url?.startsWith("/api/") ? `${process.env.REACT_APP_BACKEND_URL}${item.image_url}` : item.image_url} alt={item.title} className="h-32 w-full object-cover" onError={e => { e.target.src = "https://placehold.co/300x200/e2e8f0/94a3b8?text=Sin+imagen"; }} />
+                  <img src={resolveImg(item.image_url)} alt={item.title} className="h-32 w-full object-cover" onError={e => { e.target.src = "https://placehold.co/300x200/e2e8f0/94a3b8?text=Sin+imagen"; }} />
                   <span className={`absolute top-2 left-2 text-xs px-2 py-0.5 rounded-full font-bold ${sec.color}`}>{sec.label}</span>
+                  {teamName && <span className="absolute top-2 right-2 text-xs bg-white/90 text-[#00296B] px-1.5 py-0.5 rounded-full font-medium">{teamName}</span>}
                 </div>
                 <div className="p-2.5">
-                  <p className="text-xs font-medium text-[#0F172A] truncate mb-2">{item.title || "Sin título"}</p>
-                  <div className="flex items-center justify-between gap-1">
-                    <button onClick={() => handleToggleVisible(item)} className={`text-xs px-2 py-1 rounded-lg font-medium transition-colors ${item.visible !== false ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+                  <p className="text-xs font-medium text-[#0F172A] truncate mb-1">{item.title || "Sin título"}</p>
+                  {item.description && <p className="text-xs text-[#94A3B8] truncate mb-1">{item.description}</p>}
+                  <div className="flex items-center gap-1 mt-1">
+                    <button onClick={() => handleToggleVisible(item)} className={`text-xs px-2 py-1 rounded-lg font-medium transition-colors flex-1 ${item.visible !== false ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
                       {item.visible !== false ? "✓ Visible" : "Oculta"}
                     </button>
+                    <Button onClick={() => openEdit(item)} variant="ghost" size="sm" className="text-[#2460FF] h-7 w-7 p-0">
+                      <Edit size={12} />
+                    </Button>
                     <Button onClick={() => handleDelete(item.id)} variant="ghost" size="sm" className="text-red-400 h-7 w-7 p-0 hover:text-red-600" data-testid={`delete-gallery-${item.id}`}>
                       <Trash2 size={13} />
                     </Button>
@@ -982,6 +1063,50 @@ function GalleryManager({ onRefresh }) {
           })}
         </div>
       )}
+
+      {/* Edit dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="font-heading text-[#00296B]">Editar imagen</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            {editItem && (
+              <img src={resolveImg(editItem.image_url)} alt="" className="h-28 w-full object-cover rounded-xl" onError={e => { e.target.style.display="none"; }} />
+            )}
+            <div><Label className="text-sm">Título</Label><Input value={editForm.title || ""} onChange={e => setEF("title", e.target.value)} className="mt-1" /></div>
+            <div><Label className="text-sm">Descripción</Label><Input value={editForm.description || ""} onChange={e => setEF("description", e.target.value)} className="mt-1" /></div>
+            <div>
+              <Label className="text-sm">Sección</Label>
+              <Select value={editForm.section || "galeria"} onValueChange={v => setEF("section", v)}>
+                <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>{GALLERY_SECTIONS.filter(s => s.id !== "all").map(s => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-sm">Equipo</Label>
+                <Select value={editForm.team_id || "_none"} onValueChange={v => setEF("team_id", v === "_none" ? "" : v)}>
+                  <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Sin equipo" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Sin equipo</SelectItem>
+                    {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm">Instalación</Label>
+                <Select value={editForm.facility_id || "_none"} onValueChange={v => setEF("facility_id", v === "_none" ? "" : v)}>
+                  <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Sin inst." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Sin instalación</SelectItem>
+                    {facilities.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Button onClick={handleEdit} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">Guardar cambios</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
