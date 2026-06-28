@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import {
   Plus, Trash2, ChevronLeft, ChevronRight, Calendar, Clock,
-  Repeat, Users, MapPin, Dumbbell, Trophy, Music, Star, X, Save, Copy, Edit2
+  Repeat, Users, MapPin, Dumbbell, Trophy, Music, Star, X, Save, Copy, Edit2, Share2
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -384,6 +384,172 @@ function WeekView({ weekStart, events, teams, facilities, onDelete, onEdit }) {
   );
 }
 
+// ── Share helpers ─────────────────────────────────────────────────────────────
+const TYPE_LABELS_SHARE = { partido: "PARTIDO", entrenamiento: "ENTRENAMIENTO", convocatoria: "CONVOCATORIA", clase: "CLASE", evento: "EVENTO" };
+const TYPE_COLORS_SHARE = { partido: "#16a34a", entrenamiento: "#2460FF", convocatoria: "#d97706", clase: "#9333ea", evento: "#e11d48" };
+
+function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(" ");
+  let line = "";
+  for (let n = 0; n < words.length; n++) {
+    const test = line + words[n] + " ";
+    if (ctx.measureText(test).width > maxWidth && n > 0) {
+      ctx.fillText(line.trim(), x, y);
+      line = words[n] + " ";
+      y += lineHeight;
+      if (y > 560) break;
+    } else {
+      line = test;
+    }
+  }
+  ctx.fillText(line.trim(), x, y);
+}
+
+function generateShareCanvas(ev, teamName, facilityName, clubName) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1080;
+  const ctx = canvas.getContext("2d");
+
+  const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
+  grad.addColorStop(0, "#00296B");
+  grad.addColorStop(1, "#1a3a8a");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1080, 1080);
+
+  ctx.fillStyle = "rgba(255,255,255,0.04)";
+  ctx.beginPath(); ctx.arc(950, 120, 320, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(-80, 980, 260, 0, Math.PI * 2); ctx.fill();
+
+  const typeColor = TYPE_COLORS_SHARE[ev.type] || "#2460FF";
+  ctx.fillStyle = typeColor;
+  const chip = TYPE_LABELS_SHARE[ev.type] || "EVENTO";
+  ctx.beginPath();
+  ctx.roundRect(80, 80, ctx.measureText(chip).width + 60, 56, 28);
+  ctx.fill();
+  ctx.fillStyle = "white";
+  ctx.font = "bold 26px sans-serif";
+  ctx.fillText(chip, 110, 118);
+
+  ctx.fillStyle = "rgba(255,255,255,0.6)";
+  ctx.font = "32px sans-serif";
+  ctx.fillText(clubName || "Club Deportivo", 80, 220);
+
+  ctx.fillStyle = "white";
+  ctx.font = "bold 88px sans-serif";
+  const title = ev.title || (TYPE_LABELS_SHARE[ev.type] || "Evento");
+  wrapCanvasText(ctx, title, 80, 370, 920, 100);
+
+  const dateStr = ev.date
+    ? new Date(ev.date + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
+    : "";
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.font = "42px sans-serif";
+  if (dateStr) ctx.fillText(dateStr.charAt(0).toUpperCase() + dateStr.slice(1), 80, 680);
+
+  if (ev.time) {
+    ctx.fillStyle = "white";
+    ctx.font = "bold 62px sans-serif";
+    ctx.fillText(ev.time.slice(0, 5) + "h", 80, 770);
+  }
+
+  ctx.fillStyle = "rgba(255,255,255,0.65)";
+  ctx.font = "38px sans-serif";
+  const sub = [teamName, facilityName].filter(Boolean).join(" · ");
+  if (sub) ctx.fillText(sub, 80, 860);
+
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fillRect(0, 960, 1080, 120);
+  ctx.fillStyle = "rgba(255,255,255,0.7)";
+  ctx.font = "30px sans-serif";
+  ctx.fillText(window.location.hostname || "sudeporte.com", 80, 1030);
+
+  return canvas;
+}
+
+function ShareEventDialog({ ev, teams, facilities, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const teamName = teams.find(t => t.id === ev?.team_id)?.name || "";
+  const facilityName = facilities.find(f => f.id === ev?.facility_id)?.name || "";
+  const typeLabel = TYPE_LABELS_SHARE[ev?.type] || "Evento";
+  const dateStr = ev?.date
+    ? new Date(ev.date + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    : "";
+
+  const shareText = [
+    `⚽ ${ev?.title || typeLabel}`,
+    dateStr ? `📅 ${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)}` : "",
+    ev?.time ? `⏰ ${ev.time.slice(0, 5)}h` : "",
+    teamName ? `👥 ${teamName}` : "",
+    facilityName ? `📍 ${facilityName}` : "",
+    ev?.notes || "",
+  ].filter(Boolean).join("\n");
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(shareText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleWhatsApp = () => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank");
+  };
+
+  const handleDownload = () => {
+    const canvas = generateShareCanvas(ev, teamName, facilityName, window.location.hostname);
+    const a = document.createElement("a");
+    a.download = `evento_${ev?.date || "club"}.png`;
+    a.href = canvas.toDataURL("image/png");
+    a.click();
+  };
+
+  const handleNativeShare = async () => {
+    if (navigator.share) {
+      try { await navigator.share({ title: ev?.title || typeLabel, text: shareText }); } catch {}
+    }
+  };
+
+  if (!ev) return null;
+  const typeColor = TYPE_COLORS_SHARE[ev.type] || "#2460FF";
+
+  return (
+    <Dialog open={!!ev} onOpenChange={() => onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="font-heading text-[#00296B] flex items-center gap-2"><Share2 size={16} />Compartir evento</DialogTitle>
+        </DialogHeader>
+        <div className="rounded-xl p-5 text-white" style={{ background: `linear-gradient(135deg, #00296B 0%, ${typeColor}aa 100%)` }}>
+          <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-2">{typeLabel}</p>
+          <p className="font-heading font-bold text-lg leading-tight mb-3">{ev.title || typeLabel}</p>
+          {dateStr && <p className="text-sm opacity-90">{dateStr.charAt(0).toUpperCase() + dateStr.slice(1)}</p>}
+          {ev.time && <p className="text-2xl font-bold mt-1">{ev.time.slice(0, 5)}h</p>}
+          <div className="mt-3 space-y-0.5 text-sm opacity-80">
+            {teamName && <p>👥 {teamName}</p>}
+            {facilityName && <p>📍 {facilityName}</p>}
+          </div>
+        </div>
+        <div className="bg-[#F4F7FB] rounded-lg p-3 text-xs text-[#475569] whitespace-pre-line">{shareText}</div>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={handleCopy} className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-[#E2E8F0] text-sm text-[#475569] hover:border-[#2460FF] hover:text-[#2460FF] transition-colors">
+            <Copy size={13} />{copied ? "¡Copiado!" : "Copiar texto"}
+          </button>
+          <button onClick={handleWhatsApp} className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-green-300 text-sm text-green-700 hover:bg-green-50 transition-colors">
+            <span className="text-base">💬</span> WhatsApp
+          </button>
+          {typeof navigator !== "undefined" && navigator.share && (
+            <button onClick={handleNativeShare} className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-[#E2E8F0] text-sm text-[#475569] hover:border-[#2460FF] transition-colors">
+              <Share2 size={13} /> Compartir
+            </button>
+          )}
+          <button onClick={handleDownload} className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#2460FF] text-white text-sm hover:bg-[#00296B] transition-colors ${navigator.share ? "" : "col-span-2"}`}>
+            ⬇ Descargar PNG
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function CalendarManager() {
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
@@ -404,6 +570,7 @@ export default function CalendarManager() {
   const [editEvent, setEditEvent] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [shareEvent, setShareEvent] = useState(null);
 
   // Edit template state
   const [editTemplate, setEditTemplate] = useState(null);
@@ -640,6 +807,9 @@ export default function CalendarManager() {
                   </div>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
+                  <Button size="sm" variant="ghost" className="text-[#94A3B8] hover:text-[#2460FF] h-8 w-8 p-0" onClick={() => setShareEvent(ev)} title="Compartir">
+                    <Share2 size={13} />
+                  </Button>
                   <Button size="sm" variant="ghost" className="text-[#2460FF] h-8 w-8 p-0" onClick={() => openEditEvent(ev)}>
                     <Edit2 size={13} />
                   </Button>
@@ -716,6 +886,9 @@ export default function CalendarManager() {
           onClose={() => setEditTemplate(null)}
         />
       )}
+
+      {/* Share Event Dialog */}
+      <ShareEventDialog ev={shareEvent} teams={teams} facilities={facilities} onClose={() => setShareEvent(null)} />
     </div>
   );
 }
