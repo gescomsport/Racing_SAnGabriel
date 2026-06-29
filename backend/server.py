@@ -4118,10 +4118,17 @@ async def health():
 # Include router
 app.include_router(api_router)
 
+_cors_env = os.environ.get('CORS_ORIGINS', '')
+_cors_origins = _cors_env.split(',') if _cors_env and _cors_env != '*' else [
+    "https://racing-sangabriel.netlify.app",
+    "https://admin-racing-sangabriel.netlify.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+]
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
