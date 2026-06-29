@@ -1177,6 +1177,31 @@ function loadDynamicContent() {
     return url.startsWith('/api/') ? api + url : url;
   }
 
+  // Settings del club — sobreescribe social links con los del panel admin
+  fetch(api + '/api/settings?club_id=' + clubId)
+    .then(function(r) { return r.json(); })
+    .then(function(s) {
+      if (s.instagram_url) {
+        CLUB_CONFIG.instagram = s.instagram_url;
+        CLUB_CONFIG.instagramHandle = s.instagram_username ? '@' + s.instagram_username : CLUB_CONFIG.instagramHandle;
+      }
+      if (s.facebook_url) {
+        CLUB_CONFIG.facebook = s.facebook_url;
+        CLUB_CONFIG.facebookHandle = s.facebook_page ? '/' + s.facebook_page : CLUB_CONFIG.facebookHandle;
+      }
+      // Actualizar todos los enlaces de redes sociales en el DOM
+      ['header-ig','footer-ig','ig-handle','ig-follow','ig-cta'].forEach(function(id) {
+        var el = document.getElementById(id); if (el) el.href = CLUB_CONFIG.instagram;
+      });
+      ['header-fb','footer-fb','fb-handle','fb-follow'].forEach(function(id) {
+        var el = document.getElementById(id); if (el) el.href = CLUB_CONFIG.facebook;
+      });
+      var igH = document.getElementById('ig-handle'); if (igH) igH.textContent = CLUB_CONFIG.instagramHandle;
+      var igU = document.getElementById('ig-username'); if (igU) igU.textContent = CLUB_CONFIG.instagramHandle;
+      var fbH = document.getElementById('fb-handle'); if (fbH) fbH.textContent = CLUB_CONFIG.facebookHandle;
+    })
+    .catch(function() {});
+
   // Hero background image
   fetch(api + '/api/gallery?section=hero&club_id=' + clubId)
     .then(function(r) { return r.json(); })
