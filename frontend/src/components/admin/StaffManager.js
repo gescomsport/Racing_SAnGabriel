@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
 import { Plus, Trash2, Edit2, Download, Search, X, ChevronDown, ChevronUp, Users } from "lucide-react";
 import DocumentUploader from "./DocumentUploader";
 import { Button } from "../ui/button";
@@ -9,8 +8,7 @@ import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const ax = axios.create({ baseURL: API, withCredentials: true });
+import ax from "../../api";
 
 const ROLES = {
   entrenador:     { label: "Entrenador/a",     color: "bg-blue-100 text-blue-700" },
@@ -410,7 +408,7 @@ export default function StaffManager() {
                         <div className="w-9 h-9 rounded-full bg-[#EFF3FF] flex items-center justify-center text-[#2460FF] font-bold text-sm flex-shrink-0 overflow-hidden">
                           {s.photo_url ? (
                             <img
-                              src={s.photo_url.startsWith("/api/") ? `${process.env.REACT_APP_BACKEND_URL}${s.photo_url}` : s.photo_url}
+                              src={s.photo_url}
                               alt=""
                               className="w-full h-full object-cover rounded-full"
                               onError={e => { e.target.style.display = "none"; }}

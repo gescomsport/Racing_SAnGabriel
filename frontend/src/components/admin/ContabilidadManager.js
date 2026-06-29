@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import axios from "axios";
 import {
   TrendingUp, TrendingDown, Plus, Trash2, Edit2, Download, Search,
   X, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight,
@@ -13,10 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Checkbox } from "../ui/checkbox";
 import { Textarea } from "../ui/textarea";
 
-const ax = axios.create({
-  baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`,
-  withCredentials: true,
-});
+import ax from "../../api";
 
 // ── Category maps ────────────────────────────────────────────────────────────
 const CATEGORIAS_INGRESO = {
@@ -739,7 +735,7 @@ export default function ContabilidadManager() {
   const handleExport = () => {
     const params = new URLSearchParams();
     if (filterYear !== "todos") params.set("year", filterYear);
-    const url = `${process.env.REACT_APP_BACKEND_URL}/api/export/accounting?${params}`;
+    const url = `/api/export/accounting?${params}`;
     window.open(url, "_blank");
   };
 

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
 import { Download, Plus, Search, Filter, TrendingUp, Clock, AlertTriangle, CheckCircle, CreditCard, X, Euro, ChevronDown, ChevronUp, Users } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -8,8 +7,7 @@ import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const ax = axios.create({ baseURL: API, withCredentials: true });
+import ax from "../../api";
 
 const STATUS_STYLE = {
   paid: "bg-green-50 text-green-700 border-green-200",

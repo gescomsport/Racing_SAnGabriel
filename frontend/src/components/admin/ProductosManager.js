@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
 import { Plus, Trash2, Edit2, Package, Tag, CheckCircle, ToggleLeft, ToggleRight, Download, RefreshCw } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -8,8 +7,7 @@ import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const ax = axios.create({ baseURL: API, withCredentials: true });
+import ax from "../../api";
 
 const CATEGORIES = {
   equipacion: { label: "Equipación", color: "bg-blue-50 text-blue-700 border-blue-200" },

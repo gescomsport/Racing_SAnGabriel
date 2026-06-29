@@ -1,13 +1,12 @@
 import { useState } from "react";
-import axios from "axios";
 import { Upload, FileText, User, Eye, Trash2 } from "lucide-react";
 import { Button } from "../ui/button";
 
-const ax = axios.create({ baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`, withCredentials: true });
+import ax from "../../api";
 
 function resolveUrl(url) {
   if (!url) return null;
-  return url.startsWith("/api/") ? `${process.env.REACT_APP_BACKEND_URL}${url}` : url;
+  return url;
 }
 
 function DocSlot({ label, icon: Icon, url, accept, onUpload, uploading }) {

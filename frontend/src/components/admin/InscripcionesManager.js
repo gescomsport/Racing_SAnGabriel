@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
 import {
   Users, CheckCircle, XCircle, Clock, Link2, Copy, ChevronDown, ChevronUp,
   User, Shield, Euro, Calendar, Phone, Mail, MapPin, RefreshCw, AlertTriangle
@@ -8,7 +7,7 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
-const ax = axios.create({ baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`, withCredentials: true });
+import ax from "../../api";
 
 const STATUS_META = {
   pending:         { label: "Pendiente",       color: "bg-amber-50 text-amber-700 border-amber-200" },
@@ -95,7 +94,7 @@ export default function InscripcionesManager() {
     setTimeout(() => setActionMsg(null), 4000);
   };
 
-  const registrationUrl = `${process.env.REACT_APP_BACKEND_URL?.replace("/api", "") || window.location.origin}/register`;
+  const registrationUrl = `${window.location.origin}/register`;
 
   const copyUrl = () => {
     navigator.clipboard.writeText(registrationUrl).then(() => {

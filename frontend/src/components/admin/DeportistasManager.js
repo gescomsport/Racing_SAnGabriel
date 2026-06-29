@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
 import { Download, Upload, Search, Filter, X, ChevronDown, ChevronUp, Users, Shield, Star, Plus, Edit2, Trash2, CheckCircle, Clock, XCircle } from "lucide-react";
 import DocumentUploader from "./DocumentUploader";
 import { Button } from "../ui/button";
@@ -9,8 +8,7 @@ import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const ax = axios.create({ baseURL: API, withCredentials: true });
+import ax from "../../api";
 
 const STATUS_COLORS = {
   active: "bg-green-50 text-green-700 border-green-200",

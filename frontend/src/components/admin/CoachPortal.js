@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
 import {
   Dumbbell, Trophy, Music, Star, Calendar, LogOut, Search, Trash2, Plus
 } from "lucide-react";
@@ -10,7 +9,7 @@ import { Label } from "../ui/label";
 import { Badge } from "../ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 
-const ax = axios.create({ baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`, withCredentials: true });
+import ax from "../../api";
 
 const EVENT_TYPES = {
   entrenamiento: { label: "Entrenamiento", icon: Dumbbell, dot: "#2460FF" },

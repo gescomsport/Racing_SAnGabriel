@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
 import {
   Download, TrendingUp, Users, Star, Euro, AlertTriangle,
   Filter, RefreshCw, FileSpreadsheet, ChevronDown, ChevronUp
@@ -12,8 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "../ui/select";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const ax = axios.create({ baseURL: API, withCredentials: true });
+import ax from "../../api";
 
 // --- CSV EXPORT UTILITY ---
 function exportCSV(data, filename) {

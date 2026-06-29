@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
 import { Plus, Trash2, Edit2, ExternalLink, ToggleLeft, ToggleRight, Upload } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -8,8 +7,7 @@ import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const ax = axios.create({ baseURL: API, withCredentials: true });
+import ax from "../../api";
 
 const TIERS = {
   oro:    { label: "Oro",    color: "bg-amber-50 text-amber-700 border-amber-300",  border: "border-amber-400" },
@@ -56,7 +54,7 @@ function SponsorForm({ form, setForm, onSave, saveLabel, sponsorId }) {
   const resolvedLogo = preview
     ? preview
     : form.logo_url?.startsWith("/api/")
-      ? `${process.env.REACT_APP_BACKEND_URL}${form.logo_url}`
+      ? form.logo_url
       : form.logo_url;
 
   return (
@@ -196,7 +194,7 @@ export default function PatrocinadoresManager() {
                   <div className="w-16 h-16 rounded-lg border border-[#E2E8F0] flex items-center justify-center flex-shrink-0 bg-[#F8FAFF] overflow-hidden">
                     {s.logo_url ? (
                       <img
-                        src={s.logo_url.startsWith("/api/") ? `${process.env.REACT_APP_BACKEND_URL}${s.logo_url}` : s.logo_url}
+                        src={s.logo_url}
                         alt={s.name}
                         className="max-w-full max-h-full object-contain p-1"
                         onError={e => { e.target.style.display = "none"; }}

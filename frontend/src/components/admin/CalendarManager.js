@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
 import {
   Plus, Trash2, ChevronLeft, ChevronRight, Calendar, Clock,
   Repeat, Users, MapPin, Dumbbell, Trophy, Music, Star, X, Save, Copy, Edit2, Share2
@@ -11,8 +10,7 @@ import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const ax = axios.create({ baseURL: API, withCredentials: true });
+import ax from "../../api";
 
 const EVENT_TYPES = {
   entrenamiento: { label: "Entrenamiento", icon: Dumbbell, color: "bg-blue-100 text-blue-700 border-blue-200", dot: "#2460FF" },

@@ -1,12 +1,10 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
 import { CreditCard, AlertTriangle, CheckCircle, Clock, Download, Trash2, RefreshCw } from "lucide-react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const ax = axios.create({ baseURL: API, withCredentials: true });
+import ax from "../../api";
 
 const STATUS_CONFIG = {
   paid: { label: "Pagado", color: "bg-green-50 text-green-700", icon: CheckCircle },

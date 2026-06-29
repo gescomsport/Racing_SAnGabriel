@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
 import { Plus, Edit2, Trash2, MapPin, Clock, Users, ChevronDown, ChevronUp, X, Save } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -7,8 +6,7 @@ import { Label } from "../ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const ax = axios.create({ baseURL: API, withCredentials: true });
+import ax from "../../api";
 
 const BLANK = { name: "", address: "", type: "campo", capacity: "", notes: "" };
 const TYPE_LABEL = { campo: "Campo de fútbol", pabellon: "Pabellón", sala: "Sala / vestuarios", gimnasio: "Gimnasio", piscina: "Piscina", otro: "Otro" };
