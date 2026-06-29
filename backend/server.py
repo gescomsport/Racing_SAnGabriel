@@ -3445,6 +3445,115 @@ async def export_players(
     )
 
 
+@api_router.post("/import/players")
+async def import_players(request: Request, file: UploadFile = File(...)):
+    club_id = await get_club_id_from_request(request)
+    content = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return {"imported": 0, "errors": []}
+    headers = [str(h).strip().lower() if h else "" for h in rows[0]]
+    def col(row, name):
+        alts = {
+            "apellidos": ["apellidos", "surname", "apellido"],
+            "nombre": ["nombre", "name"],
+            "birthdate": ["f.nacimiento", "fechanacimiento", "birthdate", "nacimiento"],
+            "dni": ["nif/nie/pasaporte", "dni", "nif", "nie"],
+            "phone": ["teléfono", "telefono", "phone"],
+            "email": ["email", "correo"],
+            "status": ["estado", "status"],
+            "city": ["ciudad", "city"],
+            "address": ["dirección", "direccion", "address"],
+            "postal_code": ["cp", "postal_code", "código postal"],
+            "medical_notes": ["notas médicas", "notas medicas", "medical_notes"],
+            "blood_type": ["grupo sanguíneo", "grupo sanguineo", "blood_type"],
+            "season": ["temporada", "season"],
+            "notes": ["observaciones", "notes"],
+        }
+        candidates = alts.get(name, [name])
+        for h_idx, h in enumerate(headers):
+            if any(c in h for c in candidates):
+                v = row[h_idx] if h_idx < len(row) else None
+                return str(v).strip() if v is not None else ""
+        return ""
+    imported, errors = 0, []
+    for i, row in enumerate(rows[1:], 2):
+        if not any(row):
+            continue
+        try:
+            doc = {
+                "id": str(uuid.uuid4()), "club_id": club_id,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "surname": col(row, "apellidos"), "name": col(row, "nombre"),
+                "birthdate": col(row, "birthdate"), "dni": col(row, "dni"),
+                "phone": col(row, "phone"), "email": col(row, "email"),
+                "status": col(row, "status") or "active",
+                "city": col(row, "city"), "address": col(row, "address"),
+                "postal_code": col(row, "postal_code"),
+                "medical_notes": col(row, "medical_notes"),
+                "blood_type": col(row, "blood_type"),
+                "season": col(row, "season"), "notes": col(row, "notes"),
+                "family_id": str(uuid.uuid4()),
+            }
+            if not doc["surname"] and not doc["name"]:
+                continue
+            await db.players.insert_one(doc)
+            imported += 1
+        except Exception as e:
+            errors.append(f"Fila {i}: {str(e)}")
+    return {"imported": imported, "errors": errors}
+
+
+@api_router.post("/import/members")
+async def import_members(request: Request, file: UploadFile = File(...)):
+    club_id = await get_club_id_from_request(request)
+    content = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return {"imported": 0, "errors": []}
+    headers = [str(h).strip().lower() if h else "" for h in rows[0]]
+    def col(row, *candidates):
+        for h_idx, h in enumerate(headers):
+            if any(c in h for c in candidates):
+                v = row[h_idx] if h_idx < len(row) else None
+                return str(v).strip() if v is not None else ""
+        return ""
+    imported, errors = 0, []
+    for i, row in enumerate(rows[1:], 2):
+        if not any(row):
+            continue
+        try:
+            doc = {
+                "id": str(uuid.uuid4()), "club_id": club_id,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "surname": col(row, "apellidos", "surname"),
+                "name": col(row, "nombre", "name"),
+                "member_type": col(row, "tipo", "member_type") or "socio_adulto",
+                "dni": col(row, "nif", "nie", "dni"),
+                "birthdate": col(row, "nacimiento", "birthdate"),
+                "phone": col(row, "teléfono", "telefono", "phone"),
+                "email": col(row, "email", "correo"),
+                "address": col(row, "dirección", "direccion", "address"),
+                "postal_code": col(row, "cp", "postal"),
+                "city": col(row, "ciudad", "city"),
+                "bank_iban": col(row, "iban"),
+                "status": col(row, "estado", "status") or "active",
+                "season": col(row, "temporada", "season"),
+                "notes": col(row, "observaciones", "notes"),
+            }
+            if not doc["surname"] and not doc["name"]:
+                continue
+            await db.members.insert_one(doc)
+            imported += 1
+        except Exception as e:
+            errors.append(f"Fila {i}: {str(e)}")
+    return {"imported": imported, "errors": errors}
+
+
 @api_router.get("/export/members")
 async def export_members(
     request: Request,

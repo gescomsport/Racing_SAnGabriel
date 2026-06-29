@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import { Download, Search, Filter, X, ChevronDown, ChevronUp, Users, Shield, Star, Plus, Edit2, Trash2, CheckCircle, Clock, XCircle } from "lucide-react";
+import { Download, Upload, Search, Filter, X, ChevronDown, ChevronUp, Users, Shield, Star, Plus, Edit2, Trash2, CheckCircle, Clock, XCircle } from "lucide-react";
 import DocumentUploader from "./DocumentUploader";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -464,6 +464,21 @@ function DeportistasTab() {
             <Button size="sm" onClick={handleExport} className="bg-green-600 hover:bg-green-700 text-white text-xs">
               <Download size={12} className="mr-1" />Exportar Excel
             </Button>
+            <label className="cursor-pointer">
+              <Button size="sm" variant="outline" className="text-xs pointer-events-none" asChild>
+                <span><Upload size={12} className="mr-1" />Importar Excel</span>
+              </Button>
+              <input type="file" accept=".xlsx,.xls" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0]; if (!file) return;
+                const fd = new FormData(); fd.append("file", file);
+                try {
+                  const r = await ax.post("/import/players", fd, { headers: { "Content-Type": "multipart/form-data" } });
+                  alert(`✅ Importados: ${r.data.imported} deportistas${r.data.errors?.length ? `\n⚠️ Errores: ${r.data.errors.join("\n")}` : ""}`);
+                  window.location.reload();
+                } catch { alert("Error al importar. Comprueba el formato del archivo."); }
+                e.target.value = "";
+              }} />
+            </label>
           </div>
         </div>
       </div>
@@ -834,6 +849,21 @@ function SociosTab() {
             <Button size="sm" onClick={handleExport} className="bg-green-600 hover:bg-green-700 text-white text-xs flex-1">
               <Download size={12} className="mr-1" />Excel
             </Button>
+            <label className="cursor-pointer flex-1">
+              <Button size="sm" variant="outline" className="text-xs w-full pointer-events-none" asChild>
+                <span><Upload size={12} className="mr-1" />Importar</span>
+              </Button>
+              <input type="file" accept=".xlsx,.xls" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0]; if (!file) return;
+                const fd = new FormData(); fd.append("file", file);
+                try {
+                  const r = await ax.post("/import/members", fd, { headers: { "Content-Type": "multipart/form-data" } });
+                  alert(`✅ Importados: ${r.data.imported} socios${r.data.errors?.length ? `\n⚠️ Errores: ${r.data.errors.join("\n")}` : ""}`);
+                  window.location.reload();
+                } catch { alert("Error al importar. Comprueba el formato del archivo."); }
+                e.target.value = "";
+              }} />
+            </label>
           </div>
         </div>
       </div>
