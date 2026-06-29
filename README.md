@@ -1,303 +1,170 @@
-# Racing San Gabriel A.D.C. - Web del Club
+# SUDEPORTE — Plataforma Web para Clubes Deportivos
+### Piloto: Racing San Gabriel A.D.C.
 
-> **Plantilla web para clubes deportivos** - Desarrollada como ejemplo para [webs.sudeporte.com](https://webs.sudeporte.com/home)
-> Concepto: "Monta la web una vez, publica en redes y la web se actualiza sola"
-
-![Club Badge](https://customer-assets.emergentagent.com/job_sg-racing-portal/artifacts/5w55i820_Racing%20San%20Gabriel.svg)
+> Desarrollado por [SUDEPORTE](https://webs.sudeporte.com) · SaaS white-label para clubes deportivos
 
 ---
 
-## Arquitectura
+## URLs de Producción
+
+| Sitio | URL | Descripción |
+|-------|-----|-------------|
+| Web pública del club | https://racing-sangabriel.netlify.app | Lo que ven socios, padres y visitantes |
+| Panel de administración | https://admin-racing-sangabriel.netlify.app/admin | Gestión interna del club |
+| Backend API | https://graceful-magic-production-c9ee.up.railway.app | Railway (FastAPI) |
+
+---
+
+## Arquitectura General
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    USUARIO / CLUB                        │
-│                                                          │
-│   Publica en Instagram ──→ Make.com ──→ Webhook ──┐     │
-│   Publica en Facebook  ──→ Make.com ──→ Webhook ──┤     │
-│                                                    │     │
-│                                                    ▼     │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │              BACKEND (FastAPI)                     │   │
-│  │  Puerto: 8001  │  Prefijo: /api                   │   │
-│  │                                                    │   │
-│  │  /api/webhook/social-post  ← Recibe posts auto    │   │
-│  │  /api/social-posts         → Devuelve últimos 4   │   │
-│  │  /api/auth/*               → Login admin JWT      │   │
-│  │  /api/teams                → 14 equipos reales    │   │
-│  │  /api/matches              → Calendario partidos  │   │
-│  │  /api/gallery              → Galería fotos        │   │
-│  │  /api/contact              → Formulario contacto  │   │
-│  │  /api/settings             → Config del club      │   │
-│  │  /api/news                 → Noticias (legacy)    │   │
-│  └──────────┬───────────────────────────────────────┘   │
-│             │                                            │
-│             ▼                                            │
-│  ┌──────────────────┐                                   │
-│  │  MongoDB          │                                   │
-│  │  DB: test_database│                                   │
-│  │                   │                                   │
-│  │  Colecciones:     │                                   │
-│  │  - users          │                                   │
-│  │  - social_posts   │  ← Posts de redes (webhook)      │
-│  │  - teams          │                                   │
-│  │  - matches        │                                   │
-│  │  - gallery        │                                   │
-│  │  - contacts       │                                   │
-│  │  - settings       │                                   │
-│  │  - news           │                                   │
-│  └──────────────────┘                                   │
-│                                                          │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │              FRONTEND (React)                      │   │
-│  │  Puerto: 3000  │  Tailwind + Shadcn UI            │   │
-│  │                                                    │   │
-│  │  /           → Página pública (todas las secciones)│  │
-│  │  /login      → Login admin                         │   │
-│  │  /admin      → Panel de administración             │   │
-│  └──────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                        INTERNET                               │
+│                                                               │
+│  Padres / Socios / Visitantes                                 │
+│         │                                                     │
+│         ▼                                                     │
+│  ┌─────────────────────┐    ┌──────────────────────────┐     │
+│  │  WEB PÚBLICA        │    │  PANEL ADMIN             │     │
+│  │  Netlify (estática) │    │  Netlify (React SPA)     │     │
+│  │  website/index.html │    │  frontend/build/         │     │
+│  │                     │    │  /admin → gestión        │     │
+│  └──────────┬──────────┘    └────────────┬─────────────┘     │
+│             │                            │                    │
+│             └──────────┬─────────────────┘                    │
+│                        ▼                                      │
+│            ┌───────────────────────┐                          │
+│            │  BACKEND (Railway)    │                          │
+│            │  FastAPI + Uvicorn    │                          │
+│            │  /api/*               │                          │
+│            └───────────┬───────────┘                          │
+│                        ▼                                      │
+│            ┌───────────────────────┐                          │
+│            │  MongoDB Atlas (M0)   │                          │
+│            │  Frankfurt / Free     │                          │
+│            └───────────────────────┘                          │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Stack Tecnológico
 
-| Capa | Tecnología | Versión |
-|------|-----------|---------|
-| Backend | FastAPI + Uvicorn | 0.110.1 |
-| Base de datos | MongoDB (Motor async) | 3.3.1 |
-| Frontend | React | 19.0.0 |
-| UI Components | Shadcn/UI + Radix | Latest |
-| Estilos | Tailwind CSS | 3.4.17 |
-| Auth | JWT (PyJWT) + bcrypt | httpOnly cookies |
-| Automatización | Make.com / n8n | Webhook |
-| Fonts | Outfit (headings) + Manrope (body) | Google Fonts |
-| Icons | Lucide React | 0.507.0 |
+| Capa | Tecnología |
+|------|-----------|
+| Backend | Python · FastAPI · Motor (async MongoDB) · PyJWT · bcrypt |
+| Base de datos | MongoDB Atlas M0 (Frankfurt) |
+| Frontend admin | React 19 · Tailwind CSS · shadcn/ui · Radix UI · Axios |
+| Web pública | HTML5 · CSS3 · JS vanilla (sin dependencias) |
+| Hosting web | Netlify (2 sites: public + admin) |
+| Hosting backend | Railway |
+| Repositorio | GitHub: gescomsport/Racing_SAnGabriel |
 
 ---
 
-## Estructura de Archivos
+## Estructura del Repositorio
 
 ```
-/app
+Racing_SAnGabriel/
 ├── backend/
-│   ├── server.py                    # API completa (520+ líneas)
-│   ├── .env                         # Variables de entorno
-│   └── requirements.txt             # Dependencias Python
-│
-├── frontend/
-│   ├── .env                         # REACT_APP_BACKEND_URL
-│   ├── package.json                 # Dependencias Node
-│   ├── tailwind.config.js
-│   ├── postcss.config.js
-│   └── src/
-│       ├── App.js                   # Rutas: /, /login, /admin
-│       ├── App.css                  # Estilos custom (glass, bento, etc.)
-│       ├── index.css                # Tailwind + CSS variables
-│       ├── index.js                 # Entry point
-│       │
-│       ├── contexts/
-│       │   └── AuthContext.js       # JWT auth con cookies
-│       │
-│       ├── pages/
-│       │   ├── HomePage.js          # Página pública
-│       │   ├── LoginPage.js         # Login admin
-│       │   └── AdminPage.js         # Panel admin completo
-│       │
-│       ├── components/
-│       │   ├── Header.js            # Nav sticky + glassmorphism
-│       │   ├── HeroSection.js       # Bento grid + escudo
-│       │   ├── SocialPostsSection.js # ★ 4 posts IG + 4 FB automáticos
-│       │   ├── SocialFeedSection.js  # Facebook Page Plugin embed
-│       │   ├── SocialMediaManager.js # ★ Config Make.com en admin
-│       │   ├── TeamSection.js       # 14 equipos reales
-│       │   ├── MatchCalendar.js     # Tabla de partidos
-│       │   ├── GallerySection.js    # Galería con lightbox
-│       │   ├── ContactSection.js    # Formulario + datos reales
-│       │   ├── NewsSection.js       # (Legacy, no se usa en HomePage)
-│       │   └── Footer.js            # Footer con datos del club
-│       │
-│       ├── components/ui/           # Shadcn UI (40+ componentes)
-│       ├── hooks/
-│       └── lib/
-│
+│   ├── server.py              # API completa (FastAPI, 4000+ líneas)
+│   └── requirements.txt
+├── frontend/                  # Panel admin (React)
+│   ├── public/
+│   │   ├── _redirects         # SPA routing para Netlify
+│   │   └── index.html
+│   ├── src/
+│   │   ├── App.js             # Rutas: / /login /admin
+│   │   ├── contexts/AuthContext.js
+│   │   ├── pages/
+│   │   │   ├── AdminPage.js   # Panel completo con role gating
+│   │   │   ├── LoginPage.js
+│   │   │   └── HomePage.js
+│   │   └── components/admin/  # Todos los módulos del panel
+│   │       ├── CalendarManager.js
+│   │       ├── ContabilidadManager.js
+│   │       ├── CoachPortal.js
+│   │       ├── ComunicacionesManager.js
+│   │       ├── JugadoresManager.js
+│   │       ├── SociosManager.js
+│   │       ├── PersonalManager.js
+│   │       ├── TarifasManager.js
+│   │       ├── ReportsManager.js
+│   │       └── SettingsManager.js
+│   └── netlify.toml
+├── website/                   # Web pública del club (HTML estático)
+│   └── index.html             # CLUB_CONFIG + carga datos del backend
 ├── docs/
-│   ├── GUIA_MAKE_PASO_A_PASO.md    # ★ Guía completa Make.com
-│   └── AUTOMATIZACION_REDES_SOCIALES.md # Doc técnica webhook
-│
-└── memory/
-    ├── PRD.md                       # Product Requirements
-    └── test_credentials.md          # Credenciales admin
+│   ├── PLATAFORMAS_COSTES.md  # Plataformas, límites y costes
+│   ├── SUDEPORTE_NEGOCIO.md   # Documento para empleados / ventas
+│   └── NUEVO_CLUB_GUIA.md     # Guía para montar un nuevo club
+├── netlify.toml               # Config Netlify raíz (redirects + Node 20)
+└── README.md                  # Este archivo
 ```
+
+---
+
+## Módulos del Panel de Administración
+
+| Módulo | Funcionalidad |
+|--------|--------------|
+| Jugadores | Alta, baja, edición · foto · equipo · estado médico · exportar Excel |
+| Socios | Gestión de socios · cuotas · estado de pago |
+| Calendario | Eventos por equipo · colores · vista mes/semana · compartir imagen |
+| Partidos | Resultados · próximos encuentros · categorías |
+| Comunicaciones | Email masivo por equipo/categoría via SMTP propio del club |
+| Contabilidad | Ingresos/gastos · caja o cuenta bancaria · vinculación a persona · exportar Excel |
+| Tarifas | Configurar precios por categoría/temporada |
+| Personal | Staff del club · roles · fichas |
+| Galería | Fotos con secciones · hero · galería general |
+| Patrocinadores | Logos · links · visibilidad |
+| Informes | Exportar informe completo multi-hoja Excel |
+| Ajustes | Datos del club · SMTP · Stripe · cuentas bancarias · redes sociales |
+| Portal Entrenador | Vista reducida para entrenadores/auxiliares (role gating) |
+
+---
+
+## Acceso al Sistema
+
+| Rol | URL de acceso | Permisos |
+|-----|--------------|----------|
+| Admin | https://admin-racing-sangabriel.netlify.app/admin | Todo |
+| Entrenador | https://admin-racing-sangabriel.netlify.app/admin | Solo su equipo + comunicaciones |
+
+Credenciales piloto (cambiar antes de entregar al club):
+- Email: `admin@racingsangabriel.es`
+- Contraseña: `Racing2025!`
 
 ---
 
 ## Variables de Entorno
 
-### Backend (`/app/backend/.env`)
+### Railway (backend)
 ```
-MONGO_URL="mongodb://localhost:27017"
-DB_NAME="test_database"
-CORS_ORIGINS="*"
-JWT_SECRET="a9f8c7e6d5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8"
-ADMIN_EMAIL="admin@racingsangabriel.es"
-ADMIN_PASSWORD="Racing2025!"
-WEBHOOK_API_KEY="rsg-webhook-2025-secret"
+MONGO_URL=mongodb+srv://...@cluster.mongodb.net/
+DB_NAME=racing_sangabriel
+JWT_SECRET=...
+CORS_ORIGINS=https://racing-sangabriel.netlify.app,https://admin-racing-sangabriel.netlify.app
 ```
 
-### Frontend (`/app/frontend/.env`)
+### Netlify admin site
 ```
-REACT_APP_BACKEND_URL=https://TU-DOMINIO
-WDS_SOCKET_PORT=443
+REACT_APP_BACKEND_URL=https://graceful-magic-production-c9ee.up.railway.app
 ```
 
 ---
 
-## API Endpoints
+## Multi-tenant: Cómo añadir un nuevo club
 
-### Públicos (sin auth)
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/social-posts?source=instagram&limit=4` | Últimos 4 posts de Instagram |
-| GET | `/api/social-posts?source=facebook&limit=4` | Últimos 4 posts de Facebook |
-| GET | `/api/teams` | 14 equipos del club |
-| GET | `/api/matches` | Calendario de partidos |
-| GET | `/api/gallery` | Galería de fotos |
-| GET | `/api/settings` | Datos del club |
-| GET | `/api/news` | Noticias (legacy) |
-| POST | `/api/contact` | Enviar formulario contacto |
-| POST | `/api/webhook/social-post` | ★ Recibir post desde Make/n8n |
+Cada documento en MongoDB lleva `club_id`. El backend filtra siempre por `club_id` extraído del JWT o del query param público.
 
-### Protegidos (requieren JWT)
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/api/auth/login` | Login admin |
-| GET | `/api/auth/me` | Verificar sesión |
-| POST | `/api/auth/logout` | Cerrar sesión |
-| POST/PUT/DELETE | `/api/teams/*` | CRUD equipos |
-| POST/PUT/DELETE | `/api/matches/*` | CRUD partidos |
-| POST/DELETE | `/api/gallery/*` | CRUD galería |
-| POST/PUT/DELETE | `/api/news/*` | CRUD noticias |
-| GET/DELETE | `/api/contact/*` | Gestionar mensajes |
-| PUT | `/api/settings` | Actualizar config club |
-
-### Webhook (seguridad por API key)
-```bash
-curl -X POST https://TU-DOMINIO/api/webhook/social-post \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source": "instagram",
-    "content": "Texto del post",
-    "image_url": "https://...",
-    "post_url": "https://instagram.com/p/...",
-    "author": "@racingsangabrieladc",
-    "timestamp": "2025-04-15T12:00:00Z",
-    "api_key": "rsg-webhook-2025-secret"
-  }'
-```
+Para añadir un nuevo club: ver `docs/NUEVO_CLUB_GUIA.md`
 
 ---
 
-## Credenciales
+## Decisiones de Diseño Permanentes
 
-| Servicio | Usuario | Contraseña |
-|----------|---------|------------|
-| Admin Panel | admin@racingsangabriel.es | Racing2025! |
-| Webhook API Key | - | rsg-webhook-2025-secret |
-
----
-
-## Datos Reales del Club
-
-| Campo | Valor |
-|-------|-------|
-| Nombre | Racing San Gabriel A.D.C. |
-| Dirección | Carrer Racing San Gabriel, 39, 03008 Alacant, Alicante |
-| Teléfono | +34 617 50 27 80 |
-| Email | racingsangabrieladc@hotmail.com |
-| Horario | Lunes a Sábado 9:00-21:00, Domingo cerrado |
-| Instagram | @racingsangabrieladc |
-| Facebook | RacingSanGabrielADC |
-| Valoración Google | 4.2/5 (46 reseñas) |
-
-### 14 Categorías de Fútbol
-| Categoría | Equipos |
-|-----------|---------|
-| Alevín | A, B |
-| Benjamín | A, B |
-| Cadete | 1 |
-| Escuela Iniciación | 1 |
-| Fútbol Femenino | 4 |
-| Fútbol Sala Senior | 1 |
-| Infantil | A, B |
-| Juvenil | A, B |
-| Prebenjamín | 1 |
-| Senior | 1 |
-
-### 4 Instalaciones
-- La Cigüeña Campo Fútbol
-- Sala Multiactividad (Zumba, Fitness, Pilates)
-- Sede Club Socios
-- Campo Fútbol Sala
-
----
-
-## Flujo de Automatización (Make.com)
-
-```
-Instagram Post → Make.com (Watch Media, cada 15 min)
-                      ↓
-               HTTP POST → /api/webhook/social-post
-                      ↓
-               MongoDB (social_posts collection)
-                      ↓
-               Web muestra últimos 4 posts automáticamente
-
-Facebook Post → Make.com (Watch Posts, cada 15 min)
-                      ↓
-               HTTP POST → /api/webhook/social-post
-                      ↓
-               (mismo flujo)
-```
-
-**Coste: 0€** (Make.com free tier = 1.000 ops/mes)
-
----
-
-## Cómo Replicar para Otro Club (30 minutos)
-
-1. **Clonar el repo**
-2. **Cambiar en `.env`**: ADMIN_EMAIL, ADMIN_PASSWORD, WEBHOOK_API_KEY
-3. **Cambiar en Admin > Ajustes**: nombre, logo, colores, dirección, teléfono, email, redes sociales
-4. **En Make.com**: crear 2 nuevos escenarios conectando las cuentas del nuevo club
-5. **Desplegar** en nuevo dominio
-
----
-
-## Colores del Diseño
-
-```css
---primary: #00296B       /* Azul oscuro (principal) */
---primary-hover: #001D4A /* Azul más oscuro (hover) */
---secondary: #2460FF     /* Azul brillante (acentos) */
---background: #FFFFFF    /* Fondo blanco */
---background-alt: #F4F7FB /* Fondo gris suave */
---text-main: #0F172A     /* Texto principal */
---text-muted: #475569    /* Texto secundario */
---border: #E2E8F0        /* Bordes */
-```
-
----
-
-## Testing
-
-- Backend: **100% (72/72 tests)**
-- Frontend: **95%**
-- Integración: **100%**
-
----
-
-## Licencia
-
-Desarrollado por [sudeporte.com](https://webs.sudeporte.com/home) como plantilla para webs de clubes deportivos.
+- **Email**: SIEMPRE SMTP propio del club. Nunca SendGrid, Resend ni terceros.
+- **Stripe keys**: almacenadas en DB settings, nunca en .env.
+- **Dominio + hosting**: facturado aparte, no incluido en el precio del plan.
+- **Componentes React**: siempre a nivel de módulo (nunca dentro del render) para evitar el bug de cursor/focus.
