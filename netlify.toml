@@ -1,3 +1,7 @@
+[build.environment]
+  NODE_VERSION = "20"
+  CI = "false"
+
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
