@@ -104,6 +104,17 @@ Racing_SAnGabriel/
 
 ---
 
+## Documentación
+
+| Documento | Contenido |
+|-----------|-----------|
+| [docs/PLATAFORMAS_COSTES.md](docs/PLATAFORMAS_COSTES.md) | Plataformas usadas, límites gratuitos y costes reales |
+| [docs/SUDEPORTE_NEGOCIO.md](docs/SUDEPORTE_NEGOCIO.md) | Qué es SUDEPORTE, funcionalidades, proceso de venta, precios |
+| [docs/ESCALA_Y_PRECIOS.md](docs/ESCALA_Y_PRECIOS.md) | Análisis de costes 10→1500 clubes, planes de precios, proyección financiera |
+| [docs/NUEVO_CLUB_GUIA.md](docs/NUEVO_CLUB_GUIA.md) | Guía paso a paso para montar la web de un nuevo club (2-4h) |
+
+---
+
 ## Módulos del Panel de Administración
 
 | Módulo | Funcionalidad |
@@ -118,7 +129,7 @@ Racing_SAnGabriel/
 | Personal | Staff del club · roles · fichas |
 | Galería | Fotos con secciones · hero · galería general |
 | Patrocinadores | Logos · links · visibilidad |
-| Informes | Exportar informe completo multi-hoja Excel |
+| Informes | Exportar informe completo multi-hoja Excel · Importar deportistas/socios desde Excel |
 | Ajustes | Datos del club · SMTP · Stripe · cuentas bancarias · redes sociales |
 | Portal Entrenador | Vista reducida para entrenadores/auxiliares (role gating) |
 

@@ -121,6 +121,8 @@ GitHub ──── código fuente ───────────────
 
 > A escala, el backend puede ser **un solo proceso multi-tenant** (ya está preparado con `club_id` en cada documento). No hace falta un Railway por club.
 
+Ver análisis completo para 100-1.500 clubes en `docs/ESCALA_Y_PRECIOS.md`
+
 ---
 
 ## Plan de Acción por Alertas

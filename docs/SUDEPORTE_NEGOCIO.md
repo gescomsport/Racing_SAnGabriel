@@ -122,15 +122,18 @@ Ver guía completa: `docs/NUEVO_CLUB_GUIA.md`
 
 ---
 
-## Propuesta de precios (borrador)
+## Propuesta de precios
 
-| Plan | Precio/mes | Incluye |
-|------|-----------|---------|
-| **Básico** | 49€/mes | Web pública + Panel admin + Soporte email |
-| **Pro** | 89€/mes | Todo lo anterior + Dominio + App móvil básica + Soporte prioritario |
-| **Enterprise** | A medida | Multi-sede, integraciones, formación presencial |
+| Plan | Precio/mes | Para quién |
+|------|-----------|-----------|
+| **Básico** | 29€/mes | Club pequeño que quiere presencia digital |
+| **Estándar** | 49€/mes | Club que gestiona deportistas, socios y comunicaciones |
+| **Pro** | 79€/mes | Club con gestión económica (contabilidad, SEPA, cobros) |
+| **Enterprise** | 149€+/mes | Federaciones, multisede, SLA garantizado |
 
-> El dominio y el hosting se facturan aparte o se incluyen en el plan Pro.
+Ver desglose completo de módulos por plan en `docs/ESCALA_Y_PRECIOS.md`
+
+> Dominio personalizado: +9€/mes. Pagos online (Stripe): +15€/mes.
 
 ---
 
