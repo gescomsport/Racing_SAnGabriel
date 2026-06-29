@@ -4,6 +4,17 @@ import axios from "axios";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const AuthContext = createContext(null);
 
+const TOKEN_KEY = "sudeporte_token";
+
+// Interceptor global: añade Authorization header si hay token en localStorage
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) {
+    config.headers["Authorization"] = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -13,10 +24,17 @@ export function AuthProvider({ children }) {
   }, []);
 
   const checkAuth = async () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      setUser(false);
+      setLoading(false);
+      return;
+    }
     try {
-      const { data } = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const { data } = await axios.get(`${API}/auth/me`);
       setUser(data);
     } catch {
+      localStorage.removeItem(TOKEN_KEY);
       setUser(false);
     } finally {
       setLoading(false);
@@ -24,14 +42,16 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
-    const { data } = await axios.post(`${API}/auth/login`, { email, password }, { withCredentials: true });
+    const { data } = await axios.post(`${API}/auth/login`, { email, password });
+    localStorage.setItem(TOKEN_KEY, data.token);
     setUser(data);
     return data;
   };
 
   const logout = async () => {
-    await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+    localStorage.removeItem(TOKEN_KEY);
     setUser(false);
+    try { await axios.post(`${API}/auth/logout`, {}); } catch {}
   };
 
   return (
