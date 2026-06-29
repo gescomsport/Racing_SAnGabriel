@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import axios from "axios";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const BACKEND = process.env.REACT_APP_BACKEND_URL || "https://graceful-magic-production-c9ee.up.railway.app";
+const API = `${BACKEND}/api`;
 const AuthContext = createContext(null);
 
 const TOKEN_KEY = "sudeporte_token";
