@@ -1,7 +1,9 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import axios from "axios";
 
-const BACKEND = process.env.REACT_APP_BACKEND_URL || "https://graceful-magic-production-c9ee.up.railway.app";
+// En producción (Netlify) usamos /api que el proxy reenvía a Railway sin CORS
+// En local usamos REACT_APP_BACKEND_URL (http://localhost:8000)
+const BACKEND = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND}/api`;
 const AuthContext = createContext(null);
 
