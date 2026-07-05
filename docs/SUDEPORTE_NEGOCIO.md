@@ -104,7 +104,7 @@ El panel es el software de gestión del club. Lo usa la secretaria, el director 
 
 **Tiempo:** 2-4 horas (con la herramienta preparada)
 
-**Coste de infraestructura:** ~5-7€/mes (Railway + dominio)
+**Coste de infraestructura:** prácticamente 0€ marginal por club — todo corre en el VPS propio compartido (ver `SUDEPORTE-ARQUITECTURA.md`), que ya está pagado (182€+IVA/mes) independientemente de cuántos clubs haya, hasta ~400 clubs activos. El único coste variable real es el dominio propio si el club lo quiere (~10€/año).
 
 **Lo que necesitamos del club:**
 - Nombre completo del club
@@ -124,16 +124,7 @@ Ver guía completa: `docs/NUEVO_CLUB_GUIA.md`
 
 ## Propuesta de precios
 
-| Plan | Precio/mes | Para quién |
-|------|-----------|-----------|
-| **Básico** | 29€/mes | Club pequeño que quiere presencia digital |
-| **Estándar** | 49€/mes | Club que gestiona deportistas, socios y comunicaciones |
-| **Pro** | 79€/mes | Club con gestión económica (contabilidad, SEPA, cobros) |
-| **Enterprise** | 149€+/mes | Federaciones, multisede, SLA garantizado |
-
-Ver desglose completo de módulos por plan en `docs/ESCALA_Y_PRECIOS.md`
-
-> Dominio personalizado: +9€/mes. Pagos online (Stripe): +15€/mes.
+> **Obsoleto.** Esta tabla de planes cerrados (Básico/Estándar/Pro/Enterprise) ha sido sustituida por la estructura modular vigente: plan **Inicio** 4,99€/mes o **Presencia** 9,99€/mes + módulos sueltos (12-18€/mes) o packs con descuento. Ver el desglose completo y actualizado en `SUDEPORTE-VENTAS.md` (raíz del repo).
 
 ---
 
@@ -182,6 +173,7 @@ Ver desglose completo de módulos por plan en `docs/ESCALA_Y_PRECIOS.md`
 
 - La web pública es una página HTML muy rápida que carga en menos de 2 segundos
 - El panel admin es una aplicación web moderna (como Gmail o Notion)
-- Los datos se guardan en una base de datos en la nube (MongoDB Atlas, servidores en Europa)
-- El servidor que procesa todo está en Railway (infraestructura americana con servidores en Europa)
+- Los datos se guardan en un servidor propio (VPS en España/Europa, proveedor Ecommalia), no en servicios de terceros
+- El mismo servidor procesa todos los clubs (arquitectura multi-tenant) — por eso el coste marginal de cada club nuevo es casi cero
+- Backups remotos diarios incluidos en la infraestructura
 - Todo el código está en GitHub — respaldo garantizado, nunca se pierde nada

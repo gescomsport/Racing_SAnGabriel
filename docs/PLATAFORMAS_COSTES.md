@@ -1,5 +1,7 @@
 # Plataformas, Costes y Límites — SUDEPORTE
 
+> **Obsoleto (parcialmente).** Este documento describe el modelo antiguo de infraestructura por club (Railway + MongoDB Atlas + Netlify), usado solo durante el piloto inicial de Racing San Gabriel. Desde julio 2026 SUDEPORTE corre en un **VPS propio compartido** (Docker + MongoDB Community en `/srv/sudeporte/`), sin Railway ni Atlas. Ver la arquitectura y costes reales y vigentes en `SUDEPORTE-ARQUITECTURA.md` (raíz del repo), secciones 6 y 10. Se conserva este documento como referencia histórica del piloto y de los límites de los servicios gratuitos (Netlify, GitHub) que siguen aplicando a los frontends.
+
 ## Resumen Visual
 
 ```

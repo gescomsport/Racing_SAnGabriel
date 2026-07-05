@@ -86,3 +86,6 @@ android-sdk/
 credentials.json
 *.key
 .credentials
+
+# Imágenes subidas por usuarios (van en VPS /srv/sudeporte/uploads)
+backend/uploads/
