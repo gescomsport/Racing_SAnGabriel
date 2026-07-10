@@ -4122,6 +4122,7 @@ _cors_env = os.environ.get('CORS_ORIGINS', '')
 _cors_origins = _cors_env.split(',') if _cors_env and _cors_env != '*' else [
     "https://racing-sangabriel.netlify.app",
     "https://admin-racing-sangabriel.netlify.app",
+    "https://super.sudeporte.com",
     "http://localhost:3000",
     "http://localhost:3001",
 ]
@@ -4456,6 +4457,224 @@ async def get_privacy_policy(club_id: str = "racing_sangabriel"):
     """Política de privacidad del club (pública)."""
     settings = await db.settings.find_one({"club_id": club_id}, {"_id": 0}) or {}
     return {"privacy_policy": settings.get("privacy_policy", ""), "club_name": settings.get("club_name", "")}
+
+
+# ============================================================
+# SUPERADMIN — modelos
+# ============================================================
+
+class ClubCreate(BaseModel):
+    club_id: str
+    nombre: str
+    plan: str = "presencia"
+    modulos_activos: List[str] = []
+    email_contacto: str
+    url_web: str = ""
+    url_admin: str = ""
+    notes: str = ""
+    admin_email: str
+    admin_password: str
+    admin_name: str = ""
+
+class ClubUpdate(BaseModel):
+    nombre: Optional[str] = None
+    plan: Optional[str] = None
+    modulos_activos: Optional[List[str]] = None
+    activo: Optional[bool] = None
+    notes: Optional[str] = None
+    url_web: Optional[str] = None
+    url_admin: Optional[str] = None
+    email_contacto: Optional[str] = None
+
+class ClubUserCreate(BaseModel):
+    email: str
+    password: str
+    name: str = ""
+    role: str = "admin"
+
+# ============================================================
+# SUPERADMIN — dependencia de autenticación
+# ============================================================
+
+async def get_superadmin_user(request: Request):
+    user = await get_current_user(request)
+    if user.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Acceso denegado — se requiere rol superadmin")
+    return user
+
+# ============================================================
+# SUPERADMIN — router /super
+# ============================================================
+
+super_router = APIRouter(prefix="/super")
+
+@super_router.get("/clubs")
+async def super_list_clubs(request: Request):
+    await get_superadmin_user(request)
+    clubs = await db.clubs.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    for club in clubs:
+        cid = club["club_id"]
+        club["user_count"] = await db.users.count_documents({"club_id": cid})
+        club["player_count"] = await db.players.count_documents({"club_id": cid})
+        club["socio_count"] = await db.socios.count_documents({"club_id": cid})
+    return clubs
+
+@super_router.get("/clubs/{club_id}")
+async def super_get_club(club_id: str, request: Request):
+    await get_superadmin_user(request)
+    club = await db.clubs.find_one({"club_id": club_id}, {"_id": 0})
+    if not club:
+        raise HTTPException(status_code=404, detail="Club no encontrado")
+    users = await db.users.find(
+        {"club_id": club_id},
+        {"_id": 1, "email": 1, "name": 1, "role": 1, "created_at": 1}
+    ).to_list(50)
+    for u in users:
+        u["id"] = str(u.pop("_id"))
+    club["users"] = users
+    club["player_count"] = await db.players.count_documents({"club_id": club_id})
+    club["socio_count"] = await db.socios.count_documents({"club_id": club_id})
+    return club
+
+@super_router.post("/clubs")
+async def super_create_club(data: ClubCreate, request: Request):
+    await get_superadmin_user(request)
+    if await db.clubs.find_one({"club_id": data.club_id}):
+        raise HTTPException(status_code=400, detail=f"Ya existe un club con club_id '{data.club_id}'")
+    if await db.users.find_one({"email": data.admin_email.lower()}):
+        raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.clubs.insert_one({
+        "club_id": data.club_id,
+        "nombre": data.nombre,
+        "plan": data.plan,
+        "modulos_activos": data.modulos_activos,
+        "activo": True,
+        "fecha_alta": now[:10],
+        "email_contacto": data.email_contacto,
+        "url_web": data.url_web,
+        "url_admin": data.url_admin,
+        "notes": data.notes,
+        "created_at": now,
+    })
+    result = await db.users.insert_one({
+        "email": data.admin_email.lower(),
+        "password_hash": hash_password(data.admin_password),
+        "name": data.admin_name or data.nombre,
+        "role": "admin",
+        "club_id": data.club_id,
+        "created_at": now,
+    })
+    return {"club_id": data.club_id, "admin_user_id": str(result.inserted_id), "message": "Club creado correctamente"}
+
+@super_router.put("/clubs/{club_id}")
+async def super_update_club(club_id: str, data: ClubUpdate, request: Request):
+    await get_superadmin_user(request)
+    update = {k: v for k, v in data.model_dump().items() if v is not None}
+    if not update:
+        raise HTTPException(status_code=400, detail="Nada que actualizar")
+    await db.clubs.update_one({"club_id": club_id}, {"$set": update})
+    return await db.clubs.find_one({"club_id": club_id}, {"_id": 0})
+
+@super_router.post("/clubs/{club_id}/users")
+async def super_create_club_user(club_id: str, data: ClubUserCreate, request: Request):
+    await get_superadmin_user(request)
+    if not await db.clubs.find_one({"club_id": club_id}):
+        raise HTTPException(status_code=404, detail="Club no encontrado")
+    if await db.users.find_one({"email": data.email.lower()}):
+        raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email")
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.users.insert_one({
+        "email": data.email.lower(),
+        "password_hash": hash_password(data.password),
+        "name": data.name,
+        "role": data.role,
+        "club_id": club_id,
+        "created_at": now,
+    })
+    return {"user_id": str(result.inserted_id), "email": data.email, "role": data.role, "club_id": club_id}
+
+@super_router.post("/clubs/{club_id}/impersonate")
+async def super_impersonate(club_id: str, request: Request):
+    """Token temporal de 1h para acceder al admin de un club sin ver su contraseña."""
+    await get_superadmin_user(request)
+    club_admin = await db.users.find_one({"club_id": club_id, "role": {"$in": ["admin", "director"]}})
+    if not club_admin:
+        raise HTTPException(status_code=404, detail="No hay usuario admin en este club")
+    payload = {
+        "sub": str(club_admin["_id"]),
+        "email": club_admin["email"],
+        "club_id": club_id,
+        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+        "type": "access",
+        "impersonated_by": "superadmin",
+    }
+    token = jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+    club = await db.clubs.find_one({"club_id": club_id}, {"_id": 0})
+    return {
+        "token": token,
+        "url_admin": (club or {}).get("url_admin", ""),
+        "email": club_admin["email"],
+        "expires_in": "1 hora",
+    }
+
+@super_router.post("/demo/reset")
+async def super_reset_demo(request: Request):
+    """Reinicia SUDEPORTE DEMO a estado limpio con datos de ejemplo."""
+    await get_superadmin_user(request)
+    demo_id = "sudeporte-demo"
+    for col_name in ["players", "teams", "socios", "news", "matches", "gallery",
+                     "cobros", "cuotas", "tarifas", "comunicaciones", "sepa_mandates",
+                     "contabilidad", "inscripciones", "gdpr_log", "social_posts", "patrocinadores"]:
+        await db[col_name].delete_many({"club_id": demo_id})
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.settings.replace_one(
+        {"club_id": demo_id},
+        {"club_id": demo_id, "club_name": "SUDEPORTE DEMO", "club_email": "demo@sudeporte.com",
+         "club_phone": "+34 600 000 000", "club_address": "Calle Demo, 1 · Alicante",
+         "sport": "Fútbol", "primary_color": "#E10600", "secondary_color": "#050505"},
+        upsert=True,
+    )
+    teams = [
+        {"id": "demo-t1", "club_id": demo_id, "name": "Senior A", "category": "Senior", "season": "2025-2026"},
+        {"id": "demo-t2", "club_id": demo_id, "name": "Juvenil A", "category": "Juvenil", "season": "2025-2026"},
+        {"id": "demo-t3", "club_id": demo_id, "name": "Infantil B", "category": "Infantil", "season": "2025-2026"},
+    ]
+    await db.teams.insert_many(teams)
+    players = [
+        {"id": f"demo-p{i}", "club_id": demo_id,
+         "name": ["Carlos García","Ana Martínez","Luis Fernández","María López","Pedro Sánchez",
+                  "Laura Jiménez","Miguel Torres","Carmen Díaz","Antonio Ruiz","Isabel Moreno",
+                  "Francisco Álvarez","Teresa Romero","José Navarro","Dolores Gil","Ramón Serrano"][i-1],
+         "team_id": f"demo-t{(i-1)%3+1}",
+         "category": ["Senior","Juvenil","Infantil"][(i-1)%3],
+         "status": "activo" if i <= 12 else "inactivo",
+         "email": f"jugador{i}@demo.sudeporte.com",
+         "phone": f"+34 61{i:07d}",
+         "birth_date": f"200{i%9}-0{(i%9)+1}-15",
+         "created_at": now}
+        for i in range(1, 16)
+    ]
+    await db.players.insert_many(players)
+    socios = [
+        {"id": f"demo-s{i}", "club_id": demo_id,
+         "name": f"Socio Demo {i}", "socio_num": f"S-{i:04d}",
+         "email": f"socio{i}@demo.sudeporte.com",
+         "status": "activo", "fecha_alta": now[:10], "created_at": now}
+        for i in range(1, 9)
+    ]
+    await db.socios.insert_many(socios)
+    await db.news.insert_many([
+        {"id": "demo-n1", "club_id": demo_id, "title": "Bienvenido a SUDEPORTE DEMO",
+         "content": "Esta es la plataforma de gestión para clubes deportivos. Explora todas las funciones disponibles.", "created_at": now},
+        {"id": "demo-n2", "club_id": demo_id, "title": "Sistema de inscripciones activo",
+         "content": "El módulo de inscripciones ya está activo. Los padres pueden inscribirse desde la web.", "created_at": now},
+    ])
+    return {"message": "SUDEPORTE DEMO reiniciado", "players": len(players), "socios": len(socios), "teams": len(teams)}
+
+
+app.include_router(super_router)
 
 
 @app.on_event("shutdown")
