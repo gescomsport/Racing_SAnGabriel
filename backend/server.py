@@ -4123,6 +4123,7 @@ _cors_origins = _cors_env.split(',') if _cors_env and _cors_env != '*' else [
     "https://racing-sangabriel.netlify.app",
     "https://admin-racing-sangabriel.netlify.app",
     "https://super.sudeporte.com",
+    "http://super.sudeporte.com",
     "http://localhost:3000",
     "http://localhost:3001",
 ]
