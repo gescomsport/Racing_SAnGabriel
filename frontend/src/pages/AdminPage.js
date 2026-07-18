@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useClub } from "../contexts/ClubContext";
 import axios from "axios";
 import {
   LayoutDashboard, Newspaper, Users, CalendarDays, Images,
@@ -71,6 +72,7 @@ const sidebarItems = [
 
 export default function AdminPage() {
   const { user, loading, logout } = useAuth();
+  const { clubSettings } = useClub();
   const navigate = useNavigate();
   const [section, setSection] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -130,7 +132,9 @@ export default function AdminPage() {
       {/* Sidebar */}
       <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white border-r border-[#E2E8F0] flex flex-col transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`} data-testid="admin-sidebar">
         <div className="p-5 border-b border-[#E2E8F0]">
-          <h1 className="font-heading font-bold text-[#00296B] text-lg">Admin Panel</h1>
+          <h1 className="font-heading font-bold text-[#00296B] text-lg" title={clubSettings?.club_name}>
+            {clubSettings?.club_name || 'Admin Panel'}
+          </h1>
           <p className="text-xs text-[#475569]">{user?.email}</p>
         </div>
         <nav className="flex-1 py-3">

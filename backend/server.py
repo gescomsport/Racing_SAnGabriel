@@ -29,6 +29,10 @@ from email import encoders
 import io
 import unicodedata
 import xml.etree.ElementTree as ET
+import asyncio
+import urllib.request as _urllib_req
+import urllib.parse as _urllib_parse
+import ssl as _ssl_lib
 from datetime import datetime, timezone, timedelta
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding as sym_padding
@@ -495,6 +499,13 @@ class SettingsUpdate(BaseModel):
     smtp_from_name: Optional[str] = None
     # RGPD
     privacy_policy: Optional[str] = None
+    # Identidad visual del club
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    logo_url: Optional[str] = None
+    escudo_url: Optional[str] = None
+    sport: Optional[str] = None
+    ciudad: Optional[str] = None
 
 class SepaMandateCreate(BaseModel):
     person_id: str
@@ -1617,6 +1628,28 @@ async def get_settings(club_id: str = "racing_sangabriel"):
         await db.settings.insert_one(settings)
         settings.pop("_id", None)
     return settings
+
+@api_router.get("/public/{club_id}/settings")
+async def get_public_club_settings(club_id: str):
+    """Endpoint público (sin auth) — devuelve branding y nombre del club."""
+    settings = await db.settings.find_one({"club_id": club_id}, {"_id": 0})
+    if not settings:
+        club = await db.clubs.find_one({"club_id": club_id}, {"nombre": 1})
+        if not club:
+            raise HTTPException(status_code=404, detail="Club no encontrado")
+        return {"club_id": club_id, "club_name": club.get("nombre", club_id),
+                "primary_color": "#2460FF", "secondary_color": "#00296B",
+                "logo_url": "", "escudo_url": "", "sport": ""}
+    return {
+        "club_id": club_id,
+        "club_name": settings.get("club_name", ""),
+        "primary_color": settings.get("primary_color", "#2460FF"),
+        "secondary_color": settings.get("secondary_color", "#00296B"),
+        "logo_url": settings.get("logo_url", ""),
+        "escudo_url": settings.get("escudo_url", ""),
+        "sport": settings.get("sport", ""),
+        "ciudad": settings.get("ciudad", ""),
+    }
 
 @api_router.put("/settings")
 async def update_settings(data: SettingsUpdate, request: Request):
@@ -4118,22 +4151,54 @@ async def health():
 # Include router
 app.include_router(api_router)
 
-_cors_env = os.environ.get('CORS_ORIGINS', '')
-_cors_origins = _cors_env.split(',') if _cors_env and _cors_env != '*' else [
+# ── CORS dinámico: se recarga desde MongoDB al arrancar y al crear cada club ──
+_BASE_CORS_ORIGINS = {
     "https://racing-sangabriel.netlify.app",
     "https://admin-racing-sangabriel.netlify.app",
     "https://super.sudeporte.com",
     "http://super.sudeporte.com",
     "http://localhost:3000",
     "http://localhost:3001",
-]
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=_cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+}
+_allowed_origins: set = set(_BASE_CORS_ORIGINS)
+
+async def refresh_cors_origins():
+    origins = set(_BASE_CORS_ORIGINS)
+    env_val = os.environ.get('CORS_ORIGINS', '')
+    if env_val and env_val != '*':
+        for o in env_val.split(','):
+            o = o.strip()
+            if o:
+                origins.add(o)
+    clubs = await db.clubs.find({"activo": True}, {"club_id": 1}).to_list(1000)
+    for club in clubs:
+        cid = club["club_id"]
+        origins.add(f"https://admin.{cid}.sudeporte.com")
+        origins.add(f"http://admin.{cid}.sudeporte.com")
+    _allowed_origins.clear()
+    _allowed_origins.update(origins)
+
+@app.middleware("http")
+async def dynamic_cors_middleware(request: Request, call_next):
+    origin = request.headers.get("origin", "")
+    allowed = origin in _allowed_origins
+    if request.method == "OPTIONS" and allowed:
+        return Response(
+            status_code=204,
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Max-Age": "600",
+            },
+        )
+    response = await call_next(request)
+    if allowed:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    return response
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -4163,6 +4228,7 @@ async def startup():
     await db.schedule_events.create_index("date")
     await db.schedule_events.create_index("team_id")
     await db.schedule_templates.create_index("team_id")
+    await refresh_cors_origins()
     await seed_admin()
     await seed_demo_data()
 
@@ -4476,6 +4542,13 @@ class ClubCreate(BaseModel):
     admin_email: str
     admin_password: str
     admin_name: str = ""
+    # Identidad visual
+    primary_color: str = "#2460FF"
+    secondary_color: str = "#00296B"
+    logo_url: str = ""
+    escudo_url: str = ""
+    sport: str = "Fútbol"
+    ciudad: str = ""
 
 class ClubUpdate(BaseModel):
     nombre: Optional[str] = None
@@ -4507,6 +4580,47 @@ async def get_superadmin_user(request: Request):
 # SUPERADMIN — router /super
 # ============================================================
 
+# ── WHM / cPanel API helpers ─────────────────────────────────────────────────
+
+def _whm_call_sync(endpoint: str, params: dict) -> dict:
+    whm_host = os.environ.get('WHM_HOST', 'https://localhost:2087')
+    token = os.environ.get('WHM_API_TOKEN', '')
+    url = whm_host + endpoint
+    if params:
+        url += '?' + _urllib_parse.urlencode(params)
+    req = _urllib_req.Request(url, headers={"Authorization": f"whm root:{token}"})
+    ctx = _ssl_lib.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = _ssl_lib.CERT_NONE
+    with _urllib_req.urlopen(req, context=ctx, timeout=20) as resp:
+        return json.loads(resp.read().decode())
+
+async def whm_create_subdomain(club_id: str) -> dict:
+    """Crea admin.[club_id].sudeporte.com en cPanel vía API 2."""
+    cpanel_user = os.environ.get('CPANEL_USER', 'sudeporte')
+    params = {
+        "cpanel_jsonapi_user": cpanel_user,
+        "cpanel_jsonapi_apiversion": "2",
+        "cpanel_jsonapi_module": "SubDomain",
+        "cpanel_jsonapi_func": "addsubdomain",
+        "domain": f"admin.{club_id}",
+        "rootdomain": "sudeporte.com",
+        "dir": f"/home/{cpanel_user}/public_html/admin.{club_id}.sudeporte.com",
+    }
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _whm_call_sync, "/json-api/cpanel", params)
+
+async def whm_trigger_autossl() -> dict:
+    """Lanza AutoSSL para el usuario cPanel sudeporte."""
+    cpanel_user = os.environ.get('CPANEL_USER', 'sudeporte')
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None, _whm_call_sync,
+        "/json-api/run_autossl_check_for_user",
+        {"username": cpanel_user},
+    )
+
+# ─────────────────────────────────────────────────────────────────────────────
 super_router = APIRouter(prefix="/super")
 
 @super_router.get("/clubs")
@@ -4545,6 +4659,10 @@ async def super_create_club(data: ClubCreate, request: Request):
     if await db.users.find_one({"email": data.admin_email.lower()}):
         raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email")
     now = datetime.now(timezone.utc).isoformat()
+
+    # Auto-generar url_admin si no se proporcionó
+    url_admin = data.url_admin or f"https://admin.{data.club_id}.sudeporte.com/admin"
+
     await db.clubs.insert_one({
         "club_id": data.club_id,
         "nombre": data.nombre,
@@ -4554,7 +4672,7 @@ async def super_create_club(data: ClubCreate, request: Request):
         "fecha_alta": now[:10],
         "email_contacto": data.email_contacto,
         "url_web": data.url_web,
-        "url_admin": data.url_admin,
+        "url_admin": url_admin,
         "notes": data.notes,
         "created_at": now,
     })
@@ -4566,7 +4684,53 @@ async def super_create_club(data: ClubCreate, request: Request):
         "club_id": data.club_id,
         "created_at": now,
     })
-    return {"club_id": data.club_id, "admin_user_id": str(result.inserted_id), "message": "Club creado correctamente"}
+
+    # Crear documento de settings inicial con branding del club
+    await db.settings.replace_one(
+        {"club_id": data.club_id},
+        {
+            "club_id": data.club_id,
+            "club_name": data.nombre,
+            "sport": data.sport,
+            "ciudad": data.ciudad,
+            "email": data.email_contacto,
+            "primary_color": data.primary_color,
+            "secondary_color": data.secondary_color,
+            "logo_url": data.logo_url,
+            "escudo_url": data.escudo_url,
+            "created_at": now,
+        },
+        upsert=True,
+    )
+
+    # WHM: crear subdominio y lanzar AutoSSL (no bloquea si falla)
+    whm_result: dict = {}
+    if os.environ.get('WHM_API_TOKEN'):
+        try:
+            whm_result["subdomain"] = await whm_create_subdomain(data.club_id)
+            logger.info(f"WHM subdomain created for {data.club_id}: {whm_result['subdomain']}")
+        except Exception as exc:
+            logger.warning(f"WHM create subdomain failed for {data.club_id}: {exc}")
+            whm_result["subdomain_error"] = str(exc)
+        try:
+            whm_result["autossl"] = await whm_trigger_autossl()
+            logger.info(f"WHM AutoSSL triggered for {data.club_id}")
+        except Exception as exc:
+            logger.warning(f"WHM AutoSSL trigger failed: {exc}")
+            whm_result["autossl_error"] = str(exc)
+    else:
+        whm_result["note"] = "WHM_API_TOKEN not configured — subdomain creation skipped"
+
+    # Recargar CORS para incluir el nuevo club inmediatamente
+    await refresh_cors_origins()
+
+    return {
+        "club_id": data.club_id,
+        "admin_user_id": str(result.inserted_id),
+        "url_admin": url_admin,
+        "whm": whm_result,
+        "message": "Club creado correctamente",
+    }
 
 @super_router.put("/clubs/{club_id}")
 async def super_update_club(club_id: str, data: ClubUpdate, request: Request):
