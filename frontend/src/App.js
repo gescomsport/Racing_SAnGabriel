@@ -8,6 +8,7 @@ import AdminPage from "./pages/AdminPage";
 import RegistrationPage from "./pages/RegistrationPage";
 import MemberRegistrationPage from "./pages/MemberRegistrationPage";
 import { PaymentSuccessPage, PaymentCancelPage } from "./pages/PaymentResultPage";
+import PublicFormPage from "./pages/PublicFormPage";
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
             <Route path="/alta-socio" element={<MemberRegistrationPage />} />
             <Route path="/pago/exito" element={<PaymentSuccessPage />} />
             <Route path="/pago/cancelado" element={<PaymentCancelPage />} />
+            <Route path="/registro/:formSlug" element={<PublicFormPage />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

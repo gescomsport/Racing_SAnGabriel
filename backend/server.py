@@ -704,6 +704,109 @@ class SponsorUpdate(BaseModel):
     active: Optional[bool] = None
     order: Optional[int] = None
 
+# --- FORMS MODELS ---
+class FormFieldDef(BaseModel):
+    id: str
+    tipo: str  # texto_corto | texto_largo | seleccion | archivo | checkbox | foto_perfil | dni_anverso | dni_reverso | tutor
+    nombre: str
+    obligatorio: bool = False
+    opciones: Optional[List[str]] = []   # for tipo=seleccion
+    orden: int = 0
+    mapea_a: Optional[str] = None        # player profile field key
+
+class FormCamposBase(BaseModel):
+    nombre: bool = True
+    apellidos: bool = True
+    fecha_nacimiento: bool = True
+    sexo: bool = True
+    dni: bool = False
+    telefono: bool = True
+    email: bool = True
+    direccion: bool = False
+    cp: bool = False
+    ciudad: bool = False
+    provincia: bool = False
+    nombre_obligatorio: bool = True
+    apellidos_obligatorio: bool = True
+    fecha_nacimiento_obligatorio: bool = True
+    sexo_obligatorio: bool = False
+    dni_obligatorio: bool = False
+    telefono_obligatorio: bool = False
+    email_obligatorio: bool = True
+
+class FormCreate(BaseModel):
+    slug: str                              # URL slug único por club
+    tipo: str = "inscripcion"             # inscripcion | evento | alta_socio
+    nombre: str
+    descripcion: Optional[str] = ""
+    activo: bool = True
+    campos_base: Optional[FormCamposBase] = None
+    campos_extra: Optional[List[FormFieldDef]] = []
+    incluir_tutor: bool = True
+    tutor_edad_minima: int = 18
+    max_tutores: int = 2
+    seleccion_equipo_activo: bool = True
+    seleccion_equipo_obligatorio: bool = True
+    equipos_ids: Optional[List[str]] = []  # empty = all teams
+    cuotas_ids: Optional[List[str]] = []
+    metodos_pago: Optional[List[str]] = ["presencial"]
+    rgpd_texto: Optional[str] = ""
+    rgpd_imagen: bool = False
+    rgpd_imagen_texto: Optional[str] = ""
+    permitir_busqueda_existente: bool = True
+
+class FormUpdate(BaseModel):
+    slug: Optional[str] = None
+    tipo: Optional[str] = None
+    nombre: Optional[str] = None
+    descripcion: Optional[str] = None
+    activo: Optional[bool] = None
+    campos_base: Optional[FormCamposBase] = None
+    campos_extra: Optional[List[FormFieldDef]] = None
+    incluir_tutor: Optional[bool] = None
+    tutor_edad_minima: Optional[int] = None
+    max_tutores: Optional[int] = None
+    seleccion_equipo_activo: Optional[bool] = None
+    seleccion_equipo_obligatorio: Optional[bool] = None
+    equipos_ids: Optional[List[str]] = None
+    cuotas_ids: Optional[List[str]] = None
+    metodos_pago: Optional[List[str]] = None
+    rgpd_texto: Optional[str] = None
+    rgpd_imagen: Optional[bool] = None
+    rgpd_imagen_texto: Optional[str] = None
+    permitir_busqueda_existente: Optional[bool] = None
+
+class TutorData(BaseModel):
+    nombre: str
+    apellidos: Optional[str] = ""
+    dni: Optional[str] = ""
+    telefono: Optional[str] = ""
+    email: Optional[str] = ""
+    relacion: Optional[str] = "padre"
+    photo_url: Optional[str] = ""
+    dni_front_url: Optional[str] = ""
+    dni_back_url: Optional[str] = ""
+
+class FormSubmissionCreate(BaseModel):
+    # Player / person data
+    jugador: dict                          # all base + extra field values
+    tutores: Optional[List[TutorData]] = []
+    # Team
+    equipo_id: Optional[str] = ""
+    # Payment
+    cuota_id: Optional[str] = ""
+    metodo_pago: Optional[str] = "presencial"
+    iban: Optional[str] = ""
+    # RGPD
+    rgpd_aceptado: bool = False
+    rgpd_imagen_aceptado: bool = False
+    # Search / returning user link
+    player_id_existente: Optional[str] = None  # if updating existing player
+
+class FormSubmissionStatusUpdate(BaseModel):
+    estado: str   # pendiente | aprobada | rechazada | pago_pendiente
+    notas: Optional[str] = ""
+
 # Create app
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -1659,6 +1762,128 @@ async def update_settings(data: SettingsUpdate, request: Request):
         await db.settings.update_one({"club_id": club_id}, {"$set": update_data}, upsert=True)
     settings = await db.settings.find_one({"club_id": club_id}, {"_id": 0})
     return settings
+
+# --- PUBLIC FORM ENDPOINTS (no auth) ---
+@api_router.get("/public/{club_id}/forms")
+async def get_public_forms(club_id: str):
+    """Lista los formularios activos de un club (sin auth)."""
+    forms = await db.forms.find(
+        {"club_id": club_id, "activo": True}, {"_id": 0}
+    ).sort("nombre", 1).to_list(50)
+    return forms
+
+@api_router.get("/public/{club_id}/forms/{form_slug}")
+async def get_public_form(club_id: str, form_slug: str):
+    """Devuelve la definición completa de un formulario público."""
+    form = await db.forms.find_one({"club_id": club_id, "slug": form_slug, "activo": True}, {"_id": 0})
+    if not form:
+        raise HTTPException(status_code=404, detail="Formulario no encontrado")
+    # Include team list if needed
+    if form.get("seleccion_equipo_activo"):
+        eq_ids = form.get("equipos_ids") or []
+        query = {"club_id": club_id}
+        if eq_ids:
+            query["id"] = {"$in": eq_ids}
+        teams = await db.teams.find(query, {"_id": 0, "id": 1, "name": 1, "category": 1}).sort("name", 1).to_list(100)
+        form["equipos_disponibles"] = teams
+    # Include fee list if needed
+    if form.get("cuotas_ids"):
+        fees = await db.fees.find(
+            {"club_id": club_id, "id": {"$in": form["cuotas_ids"]}}, {"_id": 0}
+        ).to_list(50)
+        form["cuotas_disponibles"] = fees
+    return form
+
+@api_router.post("/public/{club_id}/forms/{form_slug}/search-player")
+async def search_existing_player(club_id: str, form_slug: str, request: Request):
+    """Busca un jugador/socio existente por nombre+apellidos, DNI o email."""
+    body = await request.json()
+    query_str = (body.get("query") or "").strip()
+    if not query_str or len(query_str) < 2:
+        return {"found": False}
+    # Search by DNI (exact) or email (exact) or name (fuzzy)
+    player = await db.players.find_one(
+        {"club_id": club_id, "$or": [
+            {"dni": query_str.upper()},
+            {"email": query_str.lower()},
+            {"name": {"$regex": query_str, "$options": "i"}},
+        ]},
+        {"_id": 0, "password_hash": 0}
+    )
+    if player:
+        return {"found": True, "tipo": "jugador", "data": player}
+    socio = await db.socios.find_one(
+        {"club_id": club_id, "$or": [
+            {"dni": query_str.upper()},
+            {"email": query_str.lower()},
+            {"name": {"$regex": query_str, "$options": "i"}},
+        ]},
+        {"_id": 0}
+    )
+    if socio:
+        return {"found": True, "tipo": "socio", "data": socio}
+    return {"found": False}
+
+@api_router.post("/public/{club_id}/forms/{form_slug}/submit")
+async def submit_public_form(club_id: str, form_slug: str, data: FormSubmissionCreate):
+    """Envía una inscripción pública."""
+    form = await db.forms.find_one({"club_id": club_id, "slug": form_slug, "activo": True})
+    if not form:
+        raise HTTPException(status_code=404, detail="Formulario no disponible")
+    now = datetime.now(timezone.utc).isoformat()
+    submission_id = str(uuid.uuid4())
+    doc = {
+        "id": submission_id,
+        "club_id": club_id,
+        "form_id": str(form.get("id", "")),
+        "form_slug": form_slug,
+        "form_nombre": form.get("nombre", ""),
+        "estado": "pendiente",
+        "jugador": data.jugador,
+        "tutores": [t.model_dump() for t in (data.tutores or [])],
+        "equipo_id": data.equipo_id or "",
+        "cuota_id": data.cuota_id or "",
+        "metodo_pago": data.metodo_pago or "presencial",
+        "iban": data.iban or "",
+        "rgpd_aceptado": data.rgpd_aceptado,
+        "rgpd_imagen_aceptado": data.rgpd_imagen_aceptado,
+        "rgpd_timestamp": now if data.rgpd_aceptado else None,
+        "player_id_existente": data.player_id_existente,
+        "player_id": None,
+        "notas": "",
+        "created_at": now,
+        "updated_at": now,
+    }
+    # Enrich team name
+    if data.equipo_id:
+        team = await db.teams.find_one({"club_id": club_id, "id": data.equipo_id}, {"name": 1, "category": 1})
+        if team:
+            doc["equipo_nombre"] = team.get("name", "")
+            doc["equipo_category"] = team.get("category", "")
+    # Enrich fee
+    if data.cuota_id:
+        fee = await db.fees.find_one({"club_id": club_id, "id": data.cuota_id}, {"name": 1, "amount": 1})
+        if fee:
+            doc["cuota_nombre"] = fee.get("name", "")
+            doc["cuota_importe"] = fee.get("amount", 0)
+    await db.form_submissions.insert_one(doc)
+    return {"id": submission_id, "estado": "pendiente", "message": "Solicitud recibida correctamente"}
+
+@api_router.post("/public/{club_id}/upload-form-file")
+async def upload_form_file(club_id: str, file: UploadFile = File(...)):
+    """Upload de archivo en formulario público (foto perfil, DNI, etc.). Sin auth."""
+    content = await file.read()
+    if len(content) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Archivo demasiado grande (máx 15 MB)")
+    ext = (file.filename or "file.jpg").rsplit(".", 1)[-1].lower()
+    if ext not in ("jpg", "jpeg", "png", "gif", "webp", "pdf"):
+        raise HTTPException(status_code=400, detail="Formato no permitido")
+    upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"form_{club_id}_{uuid.uuid4()}.{ext}"
+    with open(os.path.join(upload_dir, filename), "wb") as f:
+        f.write(content)
+    return {"url": f"/api/uploads/{filename}"}
 
 # --- FEES (TARIFAS) ENDPOINTS ---
 @api_router.get("/fees")
@@ -4838,6 +5063,176 @@ async def super_reset_demo(request: Request):
     ])
     return {"message": "SUDEPORTE DEMO reiniciado", "players": len(players), "socios": len(socios), "teams": len(teams)}
 
+
+# --- FORMS (ADMIN) ENDPOINTS ---
+@api_router.get("/forms")
+async def get_forms(request: Request):
+    club_id = await get_club_id_from_request(request)
+    forms = await db.forms.find({"club_id": club_id}, {"_id": 0}).sort("nombre", 1).to_list(100)
+    return forms
+
+@api_router.post("/forms")
+async def create_form(data: FormCreate, request: Request):
+    club_id = await get_club_id_from_request(request)
+    existing = await db.forms.find_one({"club_id": club_id, "slug": data.slug})
+    if existing:
+        raise HTTPException(status_code=400, detail="Ya existe un formulario con ese slug")
+    now = datetime.now(timezone.utc).isoformat()
+    doc = data.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["club_id"] = club_id
+    doc["created_at"] = now
+    doc["updated_at"] = now
+    await db.forms.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+@api_router.put("/forms/{form_id}")
+async def update_form(form_id: str, data: FormUpdate, request: Request):
+    club_id = await get_club_id_from_request(request)
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.forms.update_one({"id": form_id, "club_id": club_id}, {"$set": update_data})
+    updated = await db.forms.find_one({"id": form_id, "club_id": club_id}, {"_id": 0})
+    if not updated:
+        raise HTTPException(status_code=404, detail="Formulario no encontrado")
+    return updated
+
+@api_router.delete("/forms/{form_id}")
+async def delete_form(form_id: str, request: Request):
+    club_id = await get_club_id_from_request(request)
+    await db.forms.delete_one({"id": form_id, "club_id": club_id})
+    return {"message": "Formulario eliminado"}
+
+@api_router.get("/forms/{form_id}/submissions")
+async def get_form_submissions(
+    form_id: str,
+    request: Request,
+    estado: Optional[str] = None,
+    limit: int = 100,
+    skip: int = 0,
+):
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id, "form_id": form_id}
+    if estado:
+        query["estado"] = estado
+    total = await db.form_submissions.count_documents(query)
+    subs = await db.form_submissions.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    return {"total": total, "submissions": subs}
+
+@api_router.get("/forms/submissions/all")
+async def get_all_submissions(
+    request: Request,
+    estado: Optional[str] = None,
+    limit: int = 50,
+    skip: int = 0,
+):
+    club_id = await get_club_id_from_request(request)
+    query: dict = {"club_id": club_id}
+    if estado:
+        query["estado"] = estado
+    total = await db.form_submissions.count_documents(query)
+    subs = await db.form_submissions.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    return {"total": total, "submissions": subs}
+
+@api_router.get("/forms/submissions/{submission_id}")
+async def get_submission(submission_id: str, request: Request):
+    club_id = await get_club_id_from_request(request)
+    sub = await db.form_submissions.find_one({"id": submission_id, "club_id": club_id}, {"_id": 0})
+    if not sub:
+        raise HTTPException(status_code=404, detail="Inscripción no encontrada")
+    return sub
+
+@api_router.put("/forms/submissions/{submission_id}/status")
+async def update_submission_status(submission_id: str, data: FormSubmissionStatusUpdate, request: Request):
+    club_id = await get_club_id_from_request(request)
+    sub = await db.form_submissions.find_one({"id": submission_id, "club_id": club_id})
+    if not sub:
+        raise HTTPException(status_code=404, detail="Inscripción no encontrada")
+    now = datetime.now(timezone.utc).isoformat()
+    update: dict = {"estado": data.estado, "updated_at": now}
+    if data.notas is not None:
+        update["notas"] = data.notas
+    # Auto-create player record when approving an inscripcion
+    if data.estado == "aprobada" and not sub.get("player_id"):
+        jugador = sub.get("jugador", {})
+        form_doc = await db.forms.find_one({"id": sub.get("form_id"), "club_id": club_id})
+        tipo_form = (form_doc or {}).get("tipo", "inscripcion")
+        if tipo_form == "inscripcion":
+            player_doc = {
+                "id": str(uuid.uuid4()),
+                "club_id": club_id,
+                "name": jugador.get("nombre", ""),
+                "surname": jugador.get("apellidos", ""),
+                "birthdate": jugador.get("fecha_nacimiento", ""),
+                "gender": jugador.get("sexo", ""),
+                "dni": jugador.get("dni", ""),
+                "phone": jugador.get("telefono", ""),
+                "email": jugador.get("email", ""),
+                "address": jugador.get("direccion", ""),
+                "city": jugador.get("ciudad", ""),
+                "postal_code": jugador.get("cp", ""),
+                "photo_url": jugador.get("photo_url", ""),
+                "dni_front_url": jugador.get("dni_front_url", ""),
+                "dni_back_url": jugador.get("dni_back_url", ""),
+                "team_id": sub.get("equipo_id", ""),
+                "status": "active",
+                "season": "2026/2027",
+                "created_at": now,
+                "inscripcion_id": submission_id,
+            }
+            # Extra custom fields that map to player profile
+            for k, v in jugador.items():
+                if k not in player_doc and v:
+                    player_doc[k] = v
+            await db.players.insert_one(player_doc)
+            player_id = player_doc["id"]
+            update["player_id"] = player_id
+            # Create guardians if tutors provided
+            for tutor in (sub.get("tutores") or []):
+                guardian_doc = {
+                    "id": str(uuid.uuid4()),
+                    "club_id": club_id,
+                    "name": tutor.get("nombre", ""),
+                    "surname": tutor.get("apellidos", ""),
+                    "dni": tutor.get("dni", ""),
+                    "phone": tutor.get("telefono", ""),
+                    "email": tutor.get("email", ""),
+                    "relationship": tutor.get("relacion", "padre"),
+                    "player_ids": [player_id],
+                    "photo_url": tutor.get("photo_url", ""),
+                    "dni_front_url": tutor.get("dni_front_url", ""),
+                    "dni_back_url": tutor.get("dni_back_url", ""),
+                    "created_at": now,
+                }
+                await db.guardians.insert_one(guardian_doc)
+        elif tipo_form == "alta_socio":
+            jugador = sub.get("jugador", {})
+            socio_doc = {
+                "id": str(uuid.uuid4()),
+                "club_id": club_id,
+                "name": jugador.get("nombre", ""),
+                "surname": jugador.get("apellidos", ""),
+                "dni": jugador.get("dni", ""),
+                "birthdate": jugador.get("fecha_nacimiento", ""),
+                "phone": jugador.get("telefono", ""),
+                "email": jugador.get("email", ""),
+                "address": jugador.get("direccion", ""),
+                "city": jugador.get("ciudad", ""),
+                "postal_code": jugador.get("cp", ""),
+                "photo_url": jugador.get("photo_url", ""),
+                "dni_front_url": jugador.get("dni_front_url", ""),
+                "dni_back_url": jugador.get("dni_back_url", ""),
+                "status": "active",
+                "season": "2026/2027",
+                "member_type": "socio_adulto",
+                "created_at": now,
+                "inscripcion_id": submission_id,
+            }
+            await db.socios.insert_one(socio_doc)
+            update["player_id"] = socio_doc["id"]
+    await db.form_submissions.update_one({"id": submission_id, "club_id": club_id}, {"$set": update})
+    updated = await db.form_submissions.find_one({"id": submission_id, "club_id": club_id}, {"_id": 0})
+    return updated
 
 app.include_router(super_router)
 
