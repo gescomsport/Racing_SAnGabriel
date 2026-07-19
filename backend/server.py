@@ -169,6 +169,33 @@ class PlayerCreate(BaseModel):
     status: Optional[str] = "active"
     notes: Optional[str] = ""
 
+class PlayerUpdate(BaseModel):
+    name: Optional[str] = None
+    surname: Optional[str] = None
+    position: Optional[str] = None
+    number: Optional[int] = None
+    team_id: Optional[str] = None
+    image_url: Optional[str] = None
+    birthdate: Optional[str] = None
+    gender: Optional[str] = None
+    dni: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    postal_code: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    jersey_size: Optional[str] = None
+    season: Optional[str] = None
+    medical_notes: Optional[str] = None
+    blood_type: Optional[str] = None
+    family_id: Optional[str] = None
+    bank_iban: Optional[str] = None
+    photo_url: Optional[str] = None
+    dni_front_url: Optional[str] = None
+    dni_back_url: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
 class GuardianCreate(BaseModel):
     name: str
     surname: Optional[str] = ""
@@ -975,10 +1002,11 @@ async def create_player(data: PlayerCreate, request: Request):
     return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.put("/players/{player_id}")
-async def update_player(player_id: str, data: PlayerCreate, request: Request):
+async def update_player(player_id: str, data: PlayerUpdate, request: Request):
     club_id = await get_club_id_from_request(request)
-    update_data = data.model_dump()
-    await db.players.update_one({"id": player_id, "club_id": club_id}, {"$set": update_data})
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if update_data:
+        await db.players.update_one({"id": player_id, "club_id": club_id}, {"$set": update_data})
     updated = await db.players.find_one({"id": player_id, "club_id": club_id}, {"_id": 0})
     return updated
 
@@ -5322,6 +5350,17 @@ async def update_submission_status(submission_id: str, data: FormSubmissionStatu
         form_doc = await db.forms.find_one({"id": sub.get("form_id"), "club_id": club_id})
         tipo_form = (form_doc or {}).get("tipo", "inscripcion")
         if tipo_form == "inscripcion":
+            # Resolve file URLs: try direct key, then scan campos_extra by tipo
+            form_campos_extra = (form_doc or {}).get("campos_extra", []) if form_doc else []
+            def _resolve_file(jugador_data, direct_key, tipo_target):
+                if jugador_data.get(direct_key):
+                    return jugador_data[direct_key]
+                for campo in form_campos_extra:
+                    if campo.get("tipo") == tipo_target:
+                        fk = campo.get("mapea_a") or campo.get("id", "")
+                        if jugador_data.get(fk):
+                            return jugador_data[fk]
+                return ""
             player_doc = {
                 "id": str(uuid.uuid4()),
                 "club_id": club_id,
@@ -5335,9 +5374,9 @@ async def update_submission_status(submission_id: str, data: FormSubmissionStatu
                 "address": jugador.get("direccion", ""),
                 "city": jugador.get("ciudad", ""),
                 "postal_code": jugador.get("cp", ""),
-                "photo_url": jugador.get("photo_url", ""),
-                "dni_front_url": jugador.get("dni_front_url", ""),
-                "dni_back_url": jugador.get("dni_back_url", ""),
+                "photo_url": _resolve_file(jugador, "photo_url", "foto_perfil"),
+                "dni_front_url": _resolve_file(jugador, "dni_front_url", "dni_anverso"),
+                "dni_back_url": _resolve_file(jugador, "dni_back_url", "dni_reverso"),
                 "team_id": sub.get("equipo_id", ""),
                 "status": "active",
                 "season": "2026/2027",

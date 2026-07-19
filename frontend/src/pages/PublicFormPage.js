@@ -660,8 +660,9 @@ export default function PublicFormPage() {
             {submissionId && (
               <p className="pf-confirm-ref">Referencia: <strong>{submissionId.slice(0, 8).toUpperCase()}</strong></p>
             )}
-            <div style={{ marginTop: 32 }}>
-              <a href="/" className="pf-btn-primary">Volver al inicio</a>
+            <div style={{ marginTop: 32, display: "flex", flexDirection: "column", gap: 12 }}>
+              <a href="/portal" className="pf-btn-primary">Ver más inscripciones</a>
+              <a href="https://racing-sangabriel.netlify.app" className="pf-btn-secondary" style={{ textAlign: "center" }}>Ir a la web del club</a>
             </div>
           </div>
         )}

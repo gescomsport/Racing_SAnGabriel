@@ -323,9 +323,15 @@ function FormBuilder({ editingForm, fees, teams, onSave, onCancel }) {
   function upd(k, v) { setDraft(d => ({ ...d, [k]: v })); }
   function updBase(k, v) { setDraft(d => ({ ...d, campos_base: { ...(d.campos_base || {}), [k]: v } })); }
 
+  const FILE_MAPEO = { foto_perfil: "photo_url", dni_anverso: "dni_front_url", dni_reverso: "dni_back_url" };
   function addField() {
     if (!newField.nombre) return;
-    const campo = { ...newField, id: `c_${Date.now()}`, orden: (draft.campos_extra || []).length };
+    const campo = {
+      ...newField,
+      id: `c_${Date.now()}`,
+      orden: (draft.campos_extra || []).length,
+      mapea_a: FILE_MAPEO[newField.tipo] || newField.mapea_a || "",
+    };
     upd("campos_extra", [...(draft.campos_extra || []), campo]);
     setNewField({ tipo: "texto_corto", nombre: "", obligatorio: false, opciones: [] });
     setNewOpcion("");
