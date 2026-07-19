@@ -294,6 +294,8 @@ function FormBuilder({ editingForm, fees, teams, onSave, onCancel }) {
     nombre: "",
     descripcion: "",
     activo: true,
+    max_plazas: null,
+    lista_espera: false,
     campos_base: {
       nombre: true, apellidos: true, fecha_nacimiento: true, sexo: true, dni: false,
       telefono: true, email: true, direccion: false, cp: false, ciudad: false, provincia: false,
@@ -397,6 +399,27 @@ function FormBuilder({ editingForm, fees, teams, onSave, onCancel }) {
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={draft.activo} onChange={(e) => upd("activo", e.target.checked)} className="w-4 h-4 accent-[#2460FF]" />
               Formulario activo (visible públicamente)
+            </label>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-semibold text-[#64748B] block mb-1">Plazas máximas <span className="font-normal text-[#94A3B8]">(vacío = sin límite)</span></label>
+            <input
+              type="number"
+              className="admin-input"
+              value={draft.max_plazas || ""}
+              onChange={(e) => upd("max_plazas", e.target.value ? parseInt(e.target.value) : null)}
+              placeholder="Ej: 30"
+              min={1}
+            />
+          </div>
+          <div className="flex items-center gap-3 pt-5">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={!!draft.lista_espera} onChange={(e) => upd("lista_espera", e.target.checked)} className="w-4 h-4 accent-[#2460FF]" disabled={!draft.max_plazas} />
+              <span className={!draft.max_plazas ? "text-[#94A3B8]" : ""}>
+                Lista de espera cuando se llene
+              </span>
             </label>
           </div>
         </div>
@@ -651,6 +674,25 @@ export default function FormsManager() {
     }
   }
 
+  async function duplicateForm(id) {
+    try {
+      await axios.post(`${API_BASE}/forms/${id}/duplicate`, {}, { withCredentials: true });
+      await loadAll();
+    } catch {
+      alert("Error al duplicar.");
+    }
+  }
+
+  function exportSubmissions(id, slug) {
+    const url = `${API_BASE}/forms/${id}/export-submissions`;
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `inscripciones-${slug}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   if (view === "submissions" && selectedForm) {
     return <SubmissionsView form={selectedForm} onBack={() => { setView("list"); setSelectedForm(null); }} />;
   }
@@ -697,11 +739,13 @@ export default function FormsManager() {
         <div className="space-y-3">
           {forms.map(f => {
             const publicUrl = `${window.location.origin}/registro/${f.slug}`;
+            const plazasUsadas = f.total_inscripciones || 0;
+            const plazasPct = f.max_plazas ? Math.min(100, Math.round((plazasUsadas / f.max_plazas) * 100)) : null;
             return (
               <div key={f.id} className="bg-white rounded-xl border border-[#E2E8F0] p-5">
                 <div className="flex items-start gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h3 className="font-bold text-[#0F172A] text-base">{f.nombre}</h3>
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${f.activo ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                         {f.activo ? "Activo" : "Inactivo"}
@@ -709,9 +753,40 @@ export default function FormsManager() {
                       <span className="text-xs text-[#94A3B8] bg-[#F1F5F9] px-2 py-0.5 rounded-full">
                         {FORM_TYPES.find(t => t.value === f.tipo)?.label || f.tipo}
                       </span>
+                      {f.pendientes > 0 && (
+                        <span className="text-xs font-bold bg-red-500 text-white px-2 py-0.5 rounded-full">
+                          {f.pendientes} pendiente{f.pendientes !== 1 ? "s" : ""}
+                        </span>
+                      )}
                     </div>
                     {f.descripcion && <p className="text-sm text-[#64748B] mb-2">{f.descripcion}</p>}
-                    <div className="flex items-center gap-2">
+
+                    {/* Plazas indicator */}
+                    {f.max_plazas && (
+                      <div className="mb-3">
+                        <div className="flex justify-between text-xs text-[#64748B] mb-1">
+                          <span>{plazasUsadas} / {f.max_plazas} plazas</span>
+                          {plazasPct >= 100 ? (
+                            <span className="text-red-600 font-semibold">COMPLETO{f.lista_espera ? " — lista de espera" : ""}</span>
+                          ) : plazasPct >= 80 ? (
+                            <span className="text-orange-600 font-semibold">Quedan pocas plazas</span>
+                          ) : null}
+                        </div>
+                        <div className="h-1.5 bg-[#F1F5F9] rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${plazasPct >= 100 ? "bg-red-500" : plazasPct >= 80 ? "bg-orange-400" : "bg-[#2460FF]"}`}
+                            style={{ width: `${plazasPct}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stats */}
+                    <div className="flex items-center gap-3 mb-2 text-xs text-[#64748B]">
+                      <span>📋 {f.total_inscripciones || 0} inscripción{(f.total_inscripciones || 0) !== 1 ? "es" : ""}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-mono text-[#64748B] bg-[#F1F5F9] px-2 py-1 rounded">
                         /registro/{f.slug}
                       </span>
@@ -722,7 +797,7 @@ export default function FormsManager() {
                         Copiar enlace
                       </button>
                       <a href={`/registro/${f.slug}`} target="_blank" rel="noreferrer" className="text-xs text-[#2460FF] hover:underline">
-                        Ver formulario ↗
+                        Ver ↗
                       </a>
                     </div>
                   </div>
@@ -731,17 +806,31 @@ export default function FormsManager() {
                       className="text-sm font-semibold text-white bg-[#2460FF] hover:bg-[#1a4fd8] px-3 py-1.5 rounded-lg"
                       onClick={() => { setSelectedForm(f); setView("submissions"); }}
                     >
-                      Ver inscripciones
+                      Ver inscripciones {f.pendientes > 0 && <span className="ml-1 bg-white/30 px-1.5 rounded-full">{f.pendientes}</span>}
                     </button>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1.5 flex-wrap">
                       <button
-                        className="flex-1 text-xs border border-[#E2E8F0] hover:border-[#2460FF]/40 text-[#475569] px-2 py-1.5 rounded-lg"
+                        className="text-xs border border-[#E2E8F0] hover:border-[#2460FF]/40 text-[#475569] px-2 py-1.5 rounded-lg"
                         onClick={() => { setEditingForm(f); setView("edit"); }}
                       >
                         Editar
                       </button>
                       <button
-                        className="flex-1 text-xs border border-[#E2E8F0] text-[#475569] hover:border-[#2460FF]/40 px-2 py-1.5 rounded-lg"
+                        className="text-xs border border-[#E2E8F0] text-[#475569] hover:border-[#2460FF]/40 px-2 py-1.5 rounded-lg"
+                        title="Duplicar formulario"
+                        onClick={() => duplicateForm(f.id)}
+                      >
+                        Duplicar
+                      </button>
+                      <button
+                        className="text-xs border border-[#E2E8F0] text-[#475569] hover:border-green-400 px-2 py-1.5 rounded-lg"
+                        title="Exportar a Excel"
+                        onClick={() => exportSubmissions(f.id, f.slug)}
+                      >
+                        Excel
+                      </button>
+                      <button
+                        className="text-xs border border-[#E2E8F0] text-[#475569] hover:border-[#2460FF]/40 px-2 py-1.5 rounded-lg"
                         onClick={() => toggleActive(f)}
                       >
                         {f.activo ? "Desactivar" : "Activar"}

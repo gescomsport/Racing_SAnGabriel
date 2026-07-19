@@ -9,6 +9,7 @@ import RegistrationPage from "./pages/RegistrationPage";
 import MemberRegistrationPage from "./pages/MemberRegistrationPage";
 import { PaymentSuccessPage, PaymentCancelPage } from "./pages/PaymentResultPage";
 import PublicFormPage from "./pages/PublicFormPage";
+import ClubPortalPage from "./pages/ClubPortalPage";
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
             <Route path="/pago/exito" element={<PaymentSuccessPage />} />
             <Route path="/pago/cancelado" element={<PaymentCancelPage />} />
             <Route path="/registro/:formSlug" element={<PublicFormPage />} />
+            <Route path="/portal" element={<ClubPortalPage />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

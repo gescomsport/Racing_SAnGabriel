@@ -740,6 +740,8 @@ class FormCreate(BaseModel):
     nombre: str
     descripcion: Optional[str] = ""
     activo: bool = True
+    max_plazas: Optional[int] = None       # None = sin límite
+    lista_espera: bool = False             # si True, admite inscrip. cuando lleno
     campos_base: Optional[FormCamposBase] = None
     campos_extra: Optional[List[FormFieldDef]] = []
     incluir_tutor: bool = True
@@ -761,6 +763,8 @@ class FormUpdate(BaseModel):
     nombre: Optional[str] = None
     descripcion: Optional[str] = None
     activo: Optional[bool] = None
+    max_plazas: Optional[int] = None
+    lista_espera: Optional[bool] = None
     campos_base: Optional[FormCamposBase] = None
     campos_extra: Optional[List[FormFieldDef]] = None
     incluir_tutor: Optional[bool] = None
@@ -1764,6 +1768,36 @@ async def update_settings(data: SettingsUpdate, request: Request):
     return settings
 
 # --- PUBLIC FORM ENDPOINTS (no auth) ---
+@api_router.get("/public/{club_id}/portal")
+async def get_public_portal(club_id: str):
+    """Portal público del club: branding + formularios activos."""
+    settings = await db.settings.find_one({"club_id": club_id}, {"_id": 0, "smtp_password": 0})
+    club = await db.clubs.find_one({"club_id": club_id}, {"nombre": 1, "_id": 0})
+    forms = await db.forms.find(
+        {"club_id": club_id, "activo": True},
+        {"_id": 0, "id": 1, "slug": 1, "nombre": 1, "tipo": 1, "descripcion": 1, "max_plazas": 1, "lista_espera": 1}
+    ).sort("nombre", 1).to_list(50)
+    # Enrich forms with inscriptions count
+    for f in forms:
+        count = await db.form_submissions.count_documents({
+            "club_id": club_id, "form_id": f.get("id", ""),
+            "estado": {"$in": ["pendiente", "aprobada", "pago_pendiente"]}
+        })
+        f["inscritos"] = count
+        if f.get("max_plazas"):
+            f["plazas_libres"] = max(0, f["max_plazas"] - count)
+            f["completo"] = count >= f["max_plazas"]
+    return {
+        "club_id": club_id,
+        "club_name": (settings or {}).get("club_name") or (club or {}).get("nombre", club_id),
+        "primary_color": (settings or {}).get("primary_color", "#2460FF"),
+        "secondary_color": (settings or {}).get("secondary_color", "#00296B"),
+        "logo_url": (settings or {}).get("logo_url", ""),
+        "escudo_url": (settings or {}).get("escudo_url", ""),
+        "descripcion": (settings or {}).get("descripcion_publica", ""),
+        "formularios": forms,
+    }
+
 @api_router.get("/public/{club_id}/forms")
 async def get_public_forms(club_id: str):
     """Lista los formularios activos de un club (sin auth)."""
@@ -1830,6 +1864,21 @@ async def submit_public_form(club_id: str, form_slug: str, data: FormSubmissionC
     form = await db.forms.find_one({"club_id": club_id, "slug": form_slug, "activo": True})
     if not form:
         raise HTTPException(status_code=404, detail="Formulario no disponible")
+
+    # Control de plazas
+    estado_inicial = "pendiente"
+    max_plazas = form.get("max_plazas")
+    if max_plazas:
+        count = await db.form_submissions.count_documents({
+            "club_id": club_id, "form_id": str(form.get("id", "")),
+            "estado": {"$in": ["pendiente", "aprobada", "pago_pendiente"]}
+        })
+        if count >= max_plazas:
+            if form.get("lista_espera"):
+                estado_inicial = "lista_espera"
+            else:
+                raise HTTPException(status_code=409, detail="No quedan plazas disponibles en este formulario")
+
     now = datetime.now(timezone.utc).isoformat()
     submission_id = str(uuid.uuid4())
     doc = {
@@ -1838,7 +1887,7 @@ async def submit_public_form(club_id: str, form_slug: str, data: FormSubmissionC
         "form_id": str(form.get("id", "")),
         "form_slug": form_slug,
         "form_nombre": form.get("nombre", ""),
-        "estado": "pendiente",
+        "estado": estado_inicial,
         "jugador": data.jugador,
         "tutores": [t.model_dump() for t in (data.tutores or [])],
         "equipo_id": data.equipo_id or "",
@@ -1867,7 +1916,33 @@ async def submit_public_form(club_id: str, form_slug: str, data: FormSubmissionC
             doc["cuota_nombre"] = fee.get("name", "")
             doc["cuota_importe"] = fee.get("amount", 0)
     await db.form_submissions.insert_one(doc)
-    return {"id": submission_id, "estado": "pendiente", "message": "Solicitud recibida correctamente"}
+
+    # Email de confirmación al solicitante (best-effort)
+    jugador_email = data.jugador.get("email", "")
+    jugador_nombre = f"{data.jugador.get('nombre', '')} {data.jugador.get('apellidos', '')}".strip()
+    if jugador_email:
+        try:
+            club_settings = await db.settings.find_one({"club_id": club_id})
+            if club_settings and club_settings.get("smtp_host"):
+                club_name = club_settings.get("club_name", club_id)
+                subject = f"Solicitud recibida — {form.get('nombre', 'Inscripción')}"
+                if estado_inicial == "lista_espera":
+                    body_html = f"""<p>Hola <strong>{jugador_nombre}</strong>,</p>
+                    <p>Hemos recibido tu solicitud para <strong>{form.get('nombre', '')}</strong>.</p>
+                    <p><strong>Has quedado en lista de espera.</strong> Te avisaremos si se libera una plaza.</p>
+                    <p>Referencia: <code>{submission_id[:8].upper()}</code></p>
+                    <p>Un saludo,<br><strong>{club_name}</strong></p>"""
+                else:
+                    body_html = f"""<p>Hola <strong>{jugador_nombre}</strong>,</p>
+                    <p>Hemos recibido tu solicitud de inscripción para <strong>{form.get('nombre', '')}</strong>.</p>
+                    <p>El club la revisará y te contactará en breve para confirmarla.</p>
+                    <p>Referencia: <code>{submission_id[:8].upper()}</code></p>
+                    <p>Un saludo,<br><strong>{club_name}</strong></p>"""
+                await send_email(club_settings, jugador_email, subject, body_html)
+        except Exception:
+            pass  # No romper el flujo si el email falla
+
+    return {"id": submission_id, "estado": estado_inicial, "message": "Solicitud recibida correctamente"}
 
 @api_router.post("/public/{club_id}/upload-form-file")
 async def upload_form_file(club_id: str, file: UploadFile = File(...)):
@@ -5065,10 +5140,21 @@ async def super_reset_demo(request: Request):
 
 
 # --- FORMS (ADMIN) ENDPOINTS ---
+@api_router.get("/forms/pending-count")
+async def get_forms_pending_count(request: Request):
+    """Cuenta total de inscripciones pendientes para badge en sidebar."""
+    club_id = await get_club_id_from_request(request)
+    count = await db.form_submissions.count_documents({"club_id": club_id, "estado": "pendiente"})
+    return {"pending": count}
+
 @api_router.get("/forms")
 async def get_forms(request: Request):
     club_id = await get_club_id_from_request(request)
     forms = await db.forms.find({"club_id": club_id}, {"_id": 0}).sort("nombre", 1).to_list(100)
+    # Enrich with counts
+    for f in forms:
+        f["total_inscripciones"] = await db.form_submissions.count_documents({"club_id": club_id, "form_id": f.get("id", "")})
+        f["pendientes"] = await db.form_submissions.count_documents({"club_id": club_id, "form_id": f.get("id", ""), "estado": "pendiente"})
     return forms
 
 @api_router.post("/forms")
@@ -5102,6 +5188,87 @@ async def delete_form(form_id: str, request: Request):
     club_id = await get_club_id_from_request(request)
     await db.forms.delete_one({"id": form_id, "club_id": club_id})
     return {"message": "Formulario eliminado"}
+
+@api_router.post("/forms/{form_id}/duplicate")
+async def duplicate_form(form_id: str, request: Request):
+    """Duplica un formulario (útil para nueva temporada)."""
+    club_id = await get_club_id_from_request(request)
+    original = await db.forms.find_one({"id": form_id, "club_id": club_id})
+    if not original:
+        raise HTTPException(status_code=404, detail="Formulario no encontrado")
+    now = datetime.now(timezone.utc).isoformat()
+    new_doc = {k: v for k, v in original.items() if k != "_id"}
+    new_doc["id"] = str(uuid.uuid4())
+    new_doc["nombre"] = f"{original.get('nombre', '')} (copia)"
+    new_doc["slug"] = f"{original.get('slug', 'form')}-copia-{new_doc['id'][:6]}"
+    new_doc["activo"] = False
+    new_doc["created_at"] = now
+    new_doc["updated_at"] = now
+    await db.forms.insert_one(new_doc)
+    new_doc.pop("_id", None)
+    return new_doc
+
+@api_router.get("/forms/{form_id}/export-submissions")
+async def export_form_submissions(form_id: str, request: Request):
+    """Exporta todas las inscripciones de un formulario a Excel."""
+    club_id = await get_club_id_from_request(request)
+    form = await db.forms.find_one({"id": form_id, "club_id": club_id})
+    if not form:
+        raise HTTPException(status_code=404, detail="Formulario no encontrado")
+    subs = await db.form_submissions.find(
+        {"club_id": club_id, "form_id": form_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(5000)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Inscripciones"
+    header_fill = PatternFill("solid", fgColor="2460FF")
+    header_font = Font(bold=True, color="FFFFFF")
+
+    headers = ["Estado", "Fecha", "Nombre", "Apellidos", "F. Nacimiento", "DNI", "Teléfono", "Email",
+               "Dirección", "CP", "Ciudad", "Equipo", "Cuota", "Importe", "Método pago", "IBAN",
+               "RGPD", "Autorización imagen", "ID"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+
+    for row_idx, s in enumerate(subs, 2):
+        j = s.get("jugador", {})
+        ws.cell(row=row_idx, column=1, value=s.get("estado", ""))
+        ws.cell(row=row_idx, column=2, value=s.get("created_at", "")[:10])
+        ws.cell(row=row_idx, column=3, value=j.get("nombre", ""))
+        ws.cell(row=row_idx, column=4, value=j.get("apellidos", ""))
+        ws.cell(row=row_idx, column=5, value=j.get("fecha_nacimiento", ""))
+        ws.cell(row=row_idx, column=6, value=j.get("dni", ""))
+        ws.cell(row=row_idx, column=7, value=j.get("telefono", ""))
+        ws.cell(row=row_idx, column=8, value=j.get("email", ""))
+        ws.cell(row=row_idx, column=9, value=j.get("direccion", ""))
+        ws.cell(row=row_idx, column=10, value=j.get("cp", ""))
+        ws.cell(row=row_idx, column=11, value=j.get("ciudad", ""))
+        ws.cell(row=row_idx, column=12, value=s.get("equipo_nombre", ""))
+        ws.cell(row=row_idx, column=13, value=s.get("cuota_nombre", ""))
+        ws.cell(row=row_idx, column=14, value=s.get("cuota_importe", ""))
+        ws.cell(row=row_idx, column=15, value=s.get("metodo_pago", ""))
+        ws.cell(row=row_idx, column=16, value=s.get("iban", ""))
+        ws.cell(row=row_idx, column=17, value="Sí" if s.get("rgpd_aceptado") else "No")
+        ws.cell(row=row_idx, column=18, value="Sí" if s.get("rgpd_imagen_aceptado") else "No")
+        ws.cell(row=row_idx, column=19, value=s.get("id", "")[:8].upper())
+
+    for col in ws.columns:
+        max_len = max((len(str(cell.value or "")) for cell in col), default=8)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    safe_name = form.get("slug", "inscripciones").replace("/", "-")
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="inscripciones-{safe_name}.xlsx"'},
+    )
 
 @api_router.get("/forms/{form_id}/submissions")
 async def get_form_submissions(

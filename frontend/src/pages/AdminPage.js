@@ -88,6 +88,7 @@ export default function AdminPage() {
   const [settings, setSettings] = useState({});
   const [playerCount, setPlayerCount] = useState(0);
   const [memberCount, setMemberCount] = useState(0);
+  const [formsPending, setFormsPending] = useState(0);
 
   useEffect(() => {
     if (!loading && !user) navigate("/login");
@@ -95,18 +96,25 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadData();
+    // Poll pending forms count every 60s
+    const interval = setInterval(() => {
+      ax.get("/forms/pending-count").then(r => setFormsPending(r.data.pending || 0)).catch(() => {});
+    }, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   const loadData = async () => {
     try {
-      const [n, t, m, g, c, s, p, mb] = await Promise.all([
+      const [n, t, m, g, c, s, p, mb, fp] = await Promise.all([
         ax.get("/news"), ax.get("/teams"), ax.get("/matches"),
         ax.get("/gallery"), ax.get("/contact"), ax.get("/settings"),
-        ax.get("/players"), ax.get("/members")
+        ax.get("/players"), ax.get("/members"),
+        ax.get("/forms/pending-count").catch(() => ({ data: { pending: 0 } })),
       ]);
       setNews(n.data); setTeams(t.data); setMatches(m.data);
       setGallery(g.data); setContacts(c.data); setSettings(s.data);
       setPlayerCount(p.data.length); setMemberCount(mb.data.length);
+      setFormsPending(fp.data.pending || 0);
     } catch {}
   };
 
@@ -148,7 +156,12 @@ export default function AdminPage() {
               data-testid={`admin-nav-${item.id}`}
             >
               <item.icon size={16} />
-              {item.label}
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.id === "formularios" && formsPending > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center leading-4">
+                  {formsPending}
+                </span>
+              )}
             </button>
           ))}
         </nav>
