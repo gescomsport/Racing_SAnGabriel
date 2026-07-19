@@ -315,6 +315,7 @@ function FormBuilder({ editingForm, fees, teams, onSave, onCancel }) {
     rgpd_imagen: false,
     rgpd_imagen_texto: "Autorizo al club a publicar fotografías y vídeos en los que pueda aparecer el deportista, en redes sociales y comunicaciones del club.",
     permitir_busqueda_existente: true,
+    auto_aprobar: true,
   });
   const [saving, setSaving] = useState(false);
   const [newField, setNewField] = useState({ tipo: "texto_corto", nombre: "", obligatorio: false, opciones: [] });
@@ -401,10 +402,17 @@ function FormBuilder({ editingForm, fees, teams, onSave, onCancel }) {
               {FORM_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
-          <div className="flex items-center gap-3 pt-5">
+          <div className="flex flex-col gap-2 pt-5">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={draft.activo} onChange={(e) => upd("activo", e.target.checked)} className="w-4 h-4 accent-[#2460FF]" />
               Formulario activo (visible públicamente)
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={!!draft.auto_aprobar} onChange={(e) => upd("auto_aprobar", e.target.checked)} className="w-4 h-4 accent-green-600" />
+              <span>
+                <span className="font-medium text-green-700">Alta automática</span>
+                <span className="text-[#64748B]"> — el jugador se crea al instante, sin revisión manual</span>
+              </span>
             </label>
           </div>
         </div>

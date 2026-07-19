@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Download, Upload, Search, X, Users, Shield, Star, Plus, Edit2, Trash2,
   Save, ChevronDown, CreditCard, ShoppingCart, FileText, User, Phone, Mail,
-  MapPin, Calendar, Droplets, ClipboardList, Euro, ChevronRight
+  MapPin, Calendar, Droplets, ClipboardList, Euro, ChevronRight,
+  LayoutGrid, List
 } from "lucide-react";
 import DocumentUploader from "./DocumentUploader";
 import { Button } from "../ui/button";
@@ -675,6 +676,7 @@ function DeportistasTab() {
     search: "", team_id: "", category: "", status: "",
     birth_year: "", gender: "", season: "", has_siblings: "",
   });
+  const [viewMode, setViewMode] = useState("list"); // "list" | "grid"
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
@@ -967,7 +969,19 @@ function DeportistasTab() {
           </Select>
         </div>
         <div className="flex items-center justify-between mt-3">
-          <span className="text-xs text-[#475569]">{filtered.length} de {players.length} deportistas</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-[#475569]">{filtered.length} de {players.length} deportistas</span>
+            <div className="flex rounded-lg border border-[#E2E8F0] overflow-hidden">
+              <button onClick={() => setViewMode("list")}
+                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${viewMode === "list" ? "bg-[#00296B] text-white" : "bg-white text-[#475569] hover:bg-[#F4F7FB]"}`}>
+                <List size={13} />Lista
+              </button>
+              <button onClick={() => setViewMode("grid")}
+                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs border-l border-[#E2E8F0] transition-colors ${viewMode === "grid" ? "bg-[#00296B] text-white" : "bg-white text-[#475569] hover:bg-[#F4F7FB]"}`}>
+                <LayoutGrid size={13} />Tarjetas
+              </button>
+            </div>
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={clearFilters} className="text-xs">
               <X size={12} className="mr-1" />Limpiar filtros
@@ -994,66 +1008,111 @@ function DeportistasTab() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-[#F4F7FB] border-b border-[#E2E8F0]">
-            <tr>
-              <th className="text-left px-4 py-3 text-xs font-bold text-[#475569] uppercase tracking-wide">Deportista</th>
-              <th className="text-left px-4 py-3 text-xs font-bold text-[#475569] uppercase tracking-wide hidden lg:table-cell">Edad</th>
-              <th className="text-left px-4 py-3 text-xs font-bold text-[#475569] uppercase tracking-wide hidden md:table-cell">Equipo / Cat.</th>
-              <th className="text-left px-4 py-3 text-xs font-bold text-[#475569] uppercase tracking-wide">Estado</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(p => {
-              const age = calcAge(p.birthdate);
-              const isMinor = age !== null && age < 18;
-              const siblings = p.family_id ? (familyCount[p.family_id] || 0) - 1 : 0;
-              const team = teamMap[p.team_id] || {};
-              return (
-                <tr key={p.id} className="border-b border-[#F1F5F9] hover:bg-[#F8FAFF] cursor-pointer transition-colors"
-                  onClick={() => openProfile(p)}>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      {p.photo_url ? (
-                        <img src={p.photo_url} alt={p.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-[#00296B] text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
-                          {(p.name || "?")[0]}{(p.surname || "")[0]}
+      {/* List / Grid view */}
+      {viewMode === "list" ? (
+        <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-[#F4F7FB] border-b border-[#E2E8F0]">
+              <tr>
+                <th className="text-left px-4 py-3 text-xs font-bold text-[#475569] uppercase tracking-wide">Deportista</th>
+                <th className="text-left px-4 py-3 text-xs font-bold text-[#475569] uppercase tracking-wide hidden lg:table-cell">Edad</th>
+                <th className="text-left px-4 py-3 text-xs font-bold text-[#475569] uppercase tracking-wide hidden md:table-cell">Equipo / Cat.</th>
+                <th className="text-left px-4 py-3 text-xs font-bold text-[#475569] uppercase tracking-wide">Estado</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(p => {
+                const age = calcAge(p.birthdate);
+                const isMinor = age !== null && age < 18;
+                const siblings = p.family_id ? (familyCount[p.family_id] || 0) - 1 : 0;
+                const team = teamMap[p.team_id] || {};
+                return (
+                  <tr key={p.id} className="border-b border-[#F1F5F9] hover:bg-[#F8FAFF] cursor-pointer transition-colors"
+                    onClick={() => openProfile(p)}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {p.photo_url ? (
+                          <img src={p.photo_url} alt={p.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-[#00296B] text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                            {(p.name || "?")[0]}{(p.surname || "")[0]}
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-medium text-[#0F172A]">{p.name} {p.surname}</p>
+                          <p className="text-xs text-[#94A3B8]">{p.dni || p.email || "—"}</p>
                         </div>
-                      )}
-                      <div>
-                        <p className="font-medium text-[#0F172A]">{p.name} {p.surname}</p>
-                        <p className="text-xs text-[#94A3B8]">{p.dni || p.email || "—"}</p>
+                        {isMinor && <Badge className="text-xs bg-blue-50 text-blue-600 border-blue-200">Menor</Badge>}
+                        {siblings > 0 && <Badge className="text-xs bg-purple-50 text-purple-700 border-purple-200 hidden lg:flex">{siblings}h</Badge>}
                       </div>
-                      {isMinor && <Badge className="text-xs bg-blue-50 text-blue-600 border-blue-200">Menor</Badge>}
-                      {siblings > 0 && <Badge className="text-xs bg-purple-50 text-purple-700 border-purple-200 hidden lg:flex">{siblings}h</Badge>}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-[#475569] hidden lg:table-cell">{age != null ? `${age} años` : "—"}</td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <p className="text-xs text-[#475569]">{team.name || "—"}</p>
-                    {team.category && <p className="text-xs text-[#94A3B8]">{team.category}</p>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-medium px-2 py-1 rounded-full border ${STATUS_COLORS[p.status] || STATUS_COLORS.inactive}`}>
-                      {STATUS_LABELS[p.status] || p.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <ChevronRight size={14} className="text-[#94A3B8] inline" />
-                  </td>
-                </tr>
-              );
-            })}
-            {filtered.length === 0 && (
-              <tr><td colSpan={5} className="text-center py-10 text-[#94A3B8]">Sin resultados con los filtros aplicados</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                    <td className="px-4 py-3 text-[#475569] hidden lg:table-cell">{age != null ? `${age} años` : "—"}</td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <p className="text-xs text-[#475569]">{team.name || "—"}</p>
+                      {team.category && <p className="text-xs text-[#94A3B8]">{team.category}</p>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-medium px-2 py-1 rounded-full border ${STATUS_COLORS[p.status] || STATUS_COLORS.inactive}`}>
+                        {STATUS_LABELS[p.status] || p.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <ChevronRight size={14} className="text-[#94A3B8] inline" />
+                    </td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr><td colSpan={5} className="text-center py-10 text-[#94A3B8]">Sin resultados con los filtros aplicados</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          {filtered.map(p => {
+            const age = calcAge(p.birthdate);
+            const isMinor = age !== null && age < 18;
+            const siblings = p.family_id ? (familyCount[p.family_id] || 0) - 1 : 0;
+            const team = teamMap[p.team_id] || {};
+            const initials = `${(p.name || "?")[0]}${(p.surname || "")[0]}`.toUpperCase();
+            return (
+              <div key={p.id}
+                onClick={() => openProfile(p)}
+                className="bg-white rounded-xl border border-[#E2E8F0] p-4 flex flex-col items-center gap-2 cursor-pointer hover:border-[#2460FF] hover:shadow-sm transition-all text-center group">
+                {p.photo_url ? (
+                  <img src={p.photo_url} alt={p.name} className="w-16 h-16 rounded-full object-cover border-2 border-[#E2E8F0] group-hover:border-[#2460FF] transition-colors" />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#00296B] to-[#2460FF] text-white flex items-center justify-center text-lg font-bold border-2 border-[#E2E8F0] group-hover:border-[#2460FF] transition-colors">
+                    {initials}
+                  </div>
+                )}
+                <div className="w-full min-w-0">
+                  <p className="font-semibold text-[#0F172A] text-sm leading-tight truncate">{p.name}</p>
+                  <p className="text-[#475569] text-xs truncate">{p.surname}</p>
+                </div>
+                <div className="flex flex-col items-center gap-1 w-full">
+                  {team.name && <p className="text-xs text-[#64748B] truncate w-full">{team.name}</p>}
+                  {team.category && <p className="text-xs text-[#94A3B8]">{team.category}</p>}
+                  {!team.name && <p className="text-xs text-[#CBD5E1]">Sin equipo</p>}
+                </div>
+                <div className="flex flex-wrap justify-center gap-1">
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[p.status] || STATUS_COLORS.inactive}`}>
+                    {STATUS_LABELS[p.status] || p.status}
+                  </span>
+                  {isMinor && <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">Menor</span>}
+                  {siblings > 0 && <span className="text-xs px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">{siblings}h</span>}
+                </div>
+                {age != null && <p className="text-xs text-[#94A3B8]">{age} años</p>}
+              </div>
+            );
+          })}
+          {filtered.length === 0 && (
+            <div className="col-span-full text-center py-10 text-[#94A3B8]">Sin resultados con los filtros aplicados</div>
+          )}
+        </div>
+      )}
 
       {/* Profile Sheet */}
       <Sheet open={sheetOpen} onOpenChange={(open) => { setSheetOpen(open); if (!open) setSelectedPlayer(null); }}>

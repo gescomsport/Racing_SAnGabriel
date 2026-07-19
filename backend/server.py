@@ -783,6 +783,7 @@ class FormCreate(BaseModel):
     rgpd_imagen: bool = False
     rgpd_imagen_texto: Optional[str] = ""
     permitir_busqueda_existente: bool = True
+    auto_aprobar: bool = True   # si True, crea el jugador al instante sin revisión manual
 
 class FormUpdate(BaseModel):
     slug: Optional[str] = None
@@ -806,6 +807,7 @@ class FormUpdate(BaseModel):
     rgpd_imagen: Optional[bool] = None
     rgpd_imagen_texto: Optional[str] = None
     permitir_busqueda_existente: Optional[bool] = None
+    auto_aprobar: Optional[bool] = None
 
 class TutorData(BaseModel):
     nombre: str
@@ -1886,6 +1888,98 @@ async def search_existing_player(club_id: str, form_slug: str, request: Request)
         return {"found": True, "tipo": "socio", "data": socio}
     return {"found": False}
 
+async def _create_player_from_submission(sub: dict, form_doc: dict, club_id: str, submission_id: str, now: str) -> Optional[str]:
+    """Crea jugador+tutores (o socio) a partir de una submission. Devuelve el ID creado o None."""
+    jugador = sub.get("jugador", {})
+    tipo_form = (form_doc or {}).get("tipo", "inscripcion")
+    form_campos_extra = (form_doc or {}).get("campos_extra", []) or []
+
+    def _resolve_file(jugador_data: dict, direct_key: str, tipo_target: str) -> str:
+        if jugador_data.get(direct_key):
+            return jugador_data[direct_key]
+        for campo in form_campos_extra:
+            if campo.get("tipo") == tipo_target:
+                fk = campo.get("mapea_a") or campo.get("id", "")
+                if jugador_data.get(fk):
+                    return jugador_data[fk]
+        return ""
+
+    if tipo_form == "inscripcion":
+        player_doc = {
+            "id": str(uuid.uuid4()),
+            "club_id": club_id,
+            "name": jugador.get("nombre", ""),
+            "surname": jugador.get("apellidos", ""),
+            "birthdate": jugador.get("fecha_nacimiento", ""),
+            "gender": jugador.get("sexo", ""),
+            "dni": jugador.get("dni", ""),
+            "phone": jugador.get("telefono", ""),
+            "email": jugador.get("email", ""),
+            "address": jugador.get("direccion", ""),
+            "city": jugador.get("ciudad", ""),
+            "postal_code": jugador.get("cp", ""),
+            "photo_url": _resolve_file(jugador, "photo_url", "foto_perfil"),
+            "dni_front_url": _resolve_file(jugador, "dni_front_url", "dni_anverso"),
+            "dni_back_url": _resolve_file(jugador, "dni_back_url", "dni_reverso"),
+            "bank_iban": sub.get("iban", "") or jugador.get("iban", "") or jugador.get("bank_iban", ""),
+            "team_id": sub.get("equipo_id", ""),
+            "status": "active",
+            "season": "2026/2027",
+            "created_at": now,
+            "inscripcion_id": submission_id,
+        }
+        for k, v in jugador.items():
+            if k not in player_doc and v:
+                player_doc[k] = v
+        await db.players.insert_one(player_doc)
+        player_id = player_doc["id"]
+        for tutor in (sub.get("tutores") or []):
+            guardian_doc = {
+                "id": str(uuid.uuid4()),
+                "club_id": club_id,
+                "name": tutor.get("nombre", ""),
+                "surname": tutor.get("apellidos", ""),
+                "dni": tutor.get("dni", ""),
+                "phone": tutor.get("telefono", ""),
+                "email": tutor.get("email", ""),
+                "relationship": tutor.get("relacion", "padre"),
+                "player_ids": [player_id],
+                "photo_url": tutor.get("photo_url", ""),
+                "dni_front_url": tutor.get("dni_front_url", ""),
+                "dni_back_url": tutor.get("dni_back_url", ""),
+                "created_at": now,
+            }
+            await db.guardians.insert_one(guardian_doc)
+        return player_id
+
+    elif tipo_form == "alta_socio":
+        socio_doc = {
+            "id": str(uuid.uuid4()),
+            "club_id": club_id,
+            "name": jugador.get("nombre", ""),
+            "surname": jugador.get("apellidos", ""),
+            "dni": jugador.get("dni", ""),
+            "birthdate": jugador.get("fecha_nacimiento", ""),
+            "phone": jugador.get("telefono", ""),
+            "email": jugador.get("email", ""),
+            "address": jugador.get("direccion", ""),
+            "city": jugador.get("ciudad", ""),
+            "postal_code": jugador.get("cp", ""),
+            "photo_url": _resolve_file(jugador, "photo_url", "foto_perfil"),
+            "dni_front_url": _resolve_file(jugador, "dni_front_url", "dni_anverso"),
+            "dni_back_url": _resolve_file(jugador, "dni_back_url", "dni_reverso"),
+            "bank_iban": sub.get("iban", "") or jugador.get("iban", "") or jugador.get("bank_iban", ""),
+            "status": "active",
+            "season": "2026/2027",
+            "member_type": "socio_adulto",
+            "created_at": now,
+            "inscripcion_id": submission_id,
+        }
+        await db.socios.insert_one(socio_doc)
+        return socio_doc["id"]
+
+    return None
+
 @api_router.post("/public/{club_id}/forms/{form_slug}/submit")
 async def submit_public_form(club_id: str, form_slug: str, data: FormSubmissionCreate):
     """Envía una inscripción pública."""
@@ -1945,6 +2039,17 @@ async def submit_public_form(club_id: str, form_slug: str, data: FormSubmissionC
             doc["cuota_importe"] = fee.get("amount", 0)
     await db.form_submissions.insert_one(doc)
 
+    # Alta automática si el formulario tiene auto_aprobar=True y no es lista_espera
+    if form.get("auto_aprobar", True) and estado_inicial not in ("lista_espera",):
+        created_id = await _create_player_from_submission(doc, form, club_id, submission_id, now)
+        if created_id:
+            await db.form_submissions.update_one(
+                {"id": submission_id},
+                {"$set": {"estado": "aprobada", "player_id": created_id}}
+            )
+            doc["estado"] = "aprobada"
+            doc["player_id"] = created_id
+
     # Email de confirmación al solicitante (best-effort)
     jugador_email = data.jugador.get("email", "")
     jugador_nombre = f"{data.jugador.get('nombre', '')} {data.jugador.get('apellidos', '')}".strip()
@@ -1953,24 +2058,33 @@ async def submit_public_form(club_id: str, form_slug: str, data: FormSubmissionC
             club_settings = await db.settings.find_one({"club_id": club_id})
             if club_settings and club_settings.get("smtp_host"):
                 club_name = club_settings.get("club_name", club_id)
-                subject = f"Solicitud recibida — {form.get('nombre', 'Inscripción')}"
-                if estado_inicial == "lista_espera":
+                ref = submission_id[:8].upper()
+                if doc.get("estado") == "lista_espera":
+                    subject = f"En lista de espera — {form.get('nombre', 'Inscripción')}"
                     body_html = f"""<p>Hola <strong>{jugador_nombre}</strong>,</p>
                     <p>Hemos recibido tu solicitud para <strong>{form.get('nombre', '')}</strong>.</p>
                     <p><strong>Has quedado en lista de espera.</strong> Te avisaremos si se libera una plaza.</p>
-                    <p>Referencia: <code>{submission_id[:8].upper()}</code></p>
+                    <p>Referencia: <code>{ref}</code></p>
+                    <p>Un saludo,<br><strong>{club_name}</strong></p>"""
+                elif doc.get("estado") == "aprobada":
+                    subject = f"¡Inscripción confirmada! — {form.get('nombre', 'Inscripción')}"
+                    body_html = f"""<p>Hola <strong>{jugador_nombre}</strong>,</p>
+                    <p>¡Tu inscripción en <strong>{form.get('nombre', '')}</strong> ha sido confirmada!</p>
+                    <p>Ya estás dado/a de alta en el club. Si tienes cualquier duda, contacta con nosotros.</p>
+                    <p>Referencia: <code>{ref}</code></p>
                     <p>Un saludo,<br><strong>{club_name}</strong></p>"""
                 else:
+                    subject = f"Solicitud recibida — {form.get('nombre', 'Inscripción')}"
                     body_html = f"""<p>Hola <strong>{jugador_nombre}</strong>,</p>
                     <p>Hemos recibido tu solicitud de inscripción para <strong>{form.get('nombre', '')}</strong>.</p>
                     <p>El club la revisará y te contactará en breve para confirmarla.</p>
-                    <p>Referencia: <code>{submission_id[:8].upper()}</code></p>
+                    <p>Referencia: <code>{ref}</code></p>
                     <p>Un saludo,<br><strong>{club_name}</strong></p>"""
                 await send_email(club_settings, jugador_email, subject, body_html)
         except Exception:
             pass  # No romper el flujo si el email falla
 
-    return {"id": submission_id, "estado": estado_inicial, "message": "Solicitud recibida correctamente"}
+    return {"id": submission_id, "estado": doc.get("estado", estado_inicial), "message": "Solicitud recibida correctamente"}
 
 @api_router.post("/public/{club_id}/upload-form-file")
 async def upload_form_file(club_id: str, file: UploadFile = File(...)):
@@ -5344,95 +5458,12 @@ async def update_submission_status(submission_id: str, data: FormSubmissionStatu
     update: dict = {"estado": data.estado, "updated_at": now}
     if data.notas is not None:
         update["notas"] = data.notas
-    # Auto-create player record when approving an inscripcion
+    # Auto-create player record when approving (if not already created by auto_aprobar)
     if data.estado == "aprobada" and not sub.get("player_id"):
-        jugador = sub.get("jugador", {})
         form_doc = await db.forms.find_one({"id": sub.get("form_id"), "club_id": club_id})
-        tipo_form = (form_doc or {}).get("tipo", "inscripcion")
-        if tipo_form == "inscripcion":
-            # Resolve file URLs: try direct key, then scan campos_extra by tipo
-            form_campos_extra = (form_doc or {}).get("campos_extra", []) if form_doc else []
-            def _resolve_file(jugador_data, direct_key, tipo_target):
-                if jugador_data.get(direct_key):
-                    return jugador_data[direct_key]
-                for campo in form_campos_extra:
-                    if campo.get("tipo") == tipo_target:
-                        fk = campo.get("mapea_a") or campo.get("id", "")
-                        if jugador_data.get(fk):
-                            return jugador_data[fk]
-                return ""
-            player_doc = {
-                "id": str(uuid.uuid4()),
-                "club_id": club_id,
-                "name": jugador.get("nombre", ""),
-                "surname": jugador.get("apellidos", ""),
-                "birthdate": jugador.get("fecha_nacimiento", ""),
-                "gender": jugador.get("sexo", ""),
-                "dni": jugador.get("dni", ""),
-                "phone": jugador.get("telefono", ""),
-                "email": jugador.get("email", ""),
-                "address": jugador.get("direccion", ""),
-                "city": jugador.get("ciudad", ""),
-                "postal_code": jugador.get("cp", ""),
-                "photo_url": _resolve_file(jugador, "photo_url", "foto_perfil"),
-                "dni_front_url": _resolve_file(jugador, "dni_front_url", "dni_anverso"),
-                "dni_back_url": _resolve_file(jugador, "dni_back_url", "dni_reverso"),
-                "team_id": sub.get("equipo_id", ""),
-                "status": "active",
-                "season": "2026/2027",
-                "created_at": now,
-                "inscripcion_id": submission_id,
-            }
-            # Extra custom fields that map to player profile
-            for k, v in jugador.items():
-                if k not in player_doc and v:
-                    player_doc[k] = v
-            await db.players.insert_one(player_doc)
-            player_id = player_doc["id"]
-            update["player_id"] = player_id
-            # Create guardians if tutors provided
-            for tutor in (sub.get("tutores") or []):
-                guardian_doc = {
-                    "id": str(uuid.uuid4()),
-                    "club_id": club_id,
-                    "name": tutor.get("nombre", ""),
-                    "surname": tutor.get("apellidos", ""),
-                    "dni": tutor.get("dni", ""),
-                    "phone": tutor.get("telefono", ""),
-                    "email": tutor.get("email", ""),
-                    "relationship": tutor.get("relacion", "padre"),
-                    "player_ids": [player_id],
-                    "photo_url": tutor.get("photo_url", ""),
-                    "dni_front_url": tutor.get("dni_front_url", ""),
-                    "dni_back_url": tutor.get("dni_back_url", ""),
-                    "created_at": now,
-                }
-                await db.guardians.insert_one(guardian_doc)
-        elif tipo_form == "alta_socio":
-            jugador = sub.get("jugador", {})
-            socio_doc = {
-                "id": str(uuid.uuid4()),
-                "club_id": club_id,
-                "name": jugador.get("nombre", ""),
-                "surname": jugador.get("apellidos", ""),
-                "dni": jugador.get("dni", ""),
-                "birthdate": jugador.get("fecha_nacimiento", ""),
-                "phone": jugador.get("telefono", ""),
-                "email": jugador.get("email", ""),
-                "address": jugador.get("direccion", ""),
-                "city": jugador.get("ciudad", ""),
-                "postal_code": jugador.get("cp", ""),
-                "photo_url": jugador.get("photo_url", ""),
-                "dni_front_url": jugador.get("dni_front_url", ""),
-                "dni_back_url": jugador.get("dni_back_url", ""),
-                "status": "active",
-                "season": "2026/2027",
-                "member_type": "socio_adulto",
-                "created_at": now,
-                "inscripcion_id": submission_id,
-            }
-            await db.socios.insert_one(socio_doc)
-            update["player_id"] = socio_doc["id"]
+        created_id = await _create_player_from_submission(sub, form_doc, club_id, submission_id, now)
+        if created_id:
+            update["player_id"] = created_id
     await db.form_submissions.update_one({"id": submission_id, "club_id": club_id}, {"$set": update})
     updated = await db.form_submissions.find_one({"id": submission_id, "club_id": club_id}, {"_id": 0})
     return updated
