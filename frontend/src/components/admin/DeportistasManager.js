@@ -11,7 +11,7 @@ import { Label } from "../ui/label";
 import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../ui/sheet";
+import { Sheet, SheetContent } from "../ui/sheet";
 import { Textarea } from "../ui/textarea";
 import ax from "../../api";
 
@@ -78,6 +78,7 @@ function PlayerProfileSheet({ player, teams, onClose, onSaved, onDeleted }) {
   const [form, setForm] = useState({});
   const [guardians, setGuardians] = useState([]);
   const [fees, setFees] = useState([]);
+  const [products, setProducts] = useState([]);
   const [playerSales, setPlayerSales] = useState([]);
   const [playerPayments, setPlayerPayments] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -88,7 +89,7 @@ function PlayerProfileSheet({ player, teams, onClose, onSaved, onDeleted }) {
 
   // Sale creation state
   const [saleDialogOpen, setSaleDialogOpen] = useState(false);
-  const [saleForm, setSaleForm] = useState({ concept: "", amount: "", payment_method: "pending", due_date: "", notes: "" });
+  const [saleForm, setSaleForm] = useState({ product_id: "", fee_id: "", concept: "", amount: "", payment_method: "pending", due_date: "", notes: "" });
 
   // Guardian edit
   const [editGuardianId, setEditGuardianId] = useState(null);
@@ -98,14 +99,16 @@ function PlayerProfileSheet({ player, teams, onClose, onSaved, onDeleted }) {
 
   const load = useCallback(async () => {
     if (!player?.id) return;
-    const [gr, fr, sl, pm] = await Promise.all([
+    const [gr, fr, pr, sl, pm] = await Promise.all([
       ax.get(`/guardians/by-player/${player.id}`).catch(() => ({ data: [] })),
       ax.get("/fees").catch(() => ({ data: [] })),
+      ax.get("/products").catch(() => ({ data: [] })),
       ax.get(`/sales?person_id=${player.id}`).catch(() => ({ data: [] })),
       ax.get(`/payments?person_id=${player.id}`).catch(() => ({ data: [] })),
     ]);
     setGuardians(gr.data);
     setFees(fr.data.filter(f => f.active !== false));
+    setProducts(pr.data.filter(p => p.active !== false));
     setPlayerSales(sl.data.slice(0, 10));
     setPlayerPayments(pm.data.slice(0, 10));
     const gForms = {};
@@ -178,15 +181,17 @@ function PlayerProfileSheet({ player, teams, onClose, onSaved, onDeleted }) {
     await ax.post("/sales", {
       person_id: player.id,
       person_type: "player",
+      product_id: saleForm.product_id || "",
+      fee_id: saleForm.fee_id || "",
       concept: saleForm.concept,
       amount: parseFloat(saleForm.amount),
       payment_method: saleForm.payment_method,
       due_date: saleForm.due_date || "",
       notes: saleForm.notes || "",
-      status: "pending",
+      status: saleForm.payment_method === "cash" ? "paid" : "pending",
     });
     setSaleDialogOpen(false);
-    setSaleForm({ concept: "", amount: "", payment_method: "pending", due_date: "", notes: "" });
+    setSaleForm({ product_id: "", fee_id: "", concept: "", amount: "", payment_method: "pending", due_date: "", notes: "" });
     load();
   };
 
@@ -507,24 +512,29 @@ function PlayerProfileSheet({ player, teams, onClose, onSaved, onDeleted }) {
       {/* Assign fee dialog */}
       <Dialog open={feeDialogOpen} onOpenChange={setFeeDialogOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle className="text-[#00296B]">Asignar cuota / cobro</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-[#00296B]">Asignar cuota periódica</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div>
-              <Label className="text-sm">Cuota predefinida (opcional)</Label>
-              <Select value={feeForm.fee_id} onValueChange={v => {
-                const f = fees.find(x => x.id === v);
-                setFeeForm(prev => ({ ...prev, fee_id: v, concept: f?.name || "", amount: f?.amount?.toString() || "" }));
-              }}>
-                <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Ninguna (personalizar)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Personalizada</SelectItem>
-                  {fees.map(f => <SelectItem key={f.id} value={f.id}>{f.name} — {f.amount}€</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div><Label className="text-sm">Concepto *</Label><Input value={feeForm.concept} onChange={e => setFeeForm(p => ({ ...p, concept: e.target.value }))} className="mt-1 text-sm" /></div>
-            <div><Label className="text-sm">Importe (€) *</Label><Input type="number" step="0.01" value={feeForm.amount} onChange={e => setFeeForm(p => ({ ...p, amount: e.target.value }))} className="mt-1 text-sm" /></div>
-            <div><Label className="text-sm">Fecha límite</Label><Input type="date" value={feeForm.due_date} onChange={e => setFeeForm(p => ({ ...p, due_date: e.target.value }))} className="mt-1 text-sm" /></div>
+            {fees.length > 0 ? (
+              <div>
+                <Label className="text-sm">Cuota *</Label>
+                <Select value={feeForm.fee_id} onValueChange={v => {
+                  const f = fees.find(x => x.id === v);
+                  setFeeForm(prev => ({ ...prev, fee_id: v, concept: f?.name || "", amount: f?.amount?.toString() || "" }));
+                }}>
+                  <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Seleccionar cuota..." /></SelectTrigger>
+                  <SelectContent>
+                    {fees.map(f => <SelectItem key={f.id} value={f.id}>{f.name} — {f.amount}€/{f.fee_type === "cuota_mensual" ? "mes" : "temp."}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+                No hay cuotas configuradas. Créalas en <strong>Cobros y Tarifas</strong> primero.
+              </div>
+            )}
+            <div><Label className="text-sm">Concepto</Label><Input value={feeForm.concept} onChange={e => setFeeForm(p => ({ ...p, concept: e.target.value }))} className="mt-1 text-sm" placeholder="Auto-completado al elegir cuota" /></div>
+            <div><Label className="text-sm">Importe (€)</Label><Input type="number" step="0.01" value={feeForm.amount} onChange={e => setFeeForm(p => ({ ...p, amount: e.target.value }))} className="mt-1 text-sm" /></div>
+            <div><Label className="text-sm">Fecha límite de pago</Label><Input type="date" value={feeForm.due_date} onChange={e => setFeeForm(p => ({ ...p, due_date: e.target.value }))} className="mt-1 text-sm" /></div>
             <div><Label className="text-sm">Notas</Label><Input value={feeForm.notes} onChange={e => setFeeForm(p => ({ ...p, notes: e.target.value }))} className="mt-1 text-sm" /></div>
             <Button onClick={handleAssignFee} disabled={!feeForm.concept || !feeForm.amount} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">
               Crear cobro pendiente
@@ -536,28 +546,59 @@ function PlayerProfileSheet({ player, teams, onClose, onSaved, onDeleted }) {
       {/* Create sale dialog */}
       <Dialog open={saleDialogOpen} onOpenChange={setSaleDialogOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle className="text-[#00296B]">Generar venta</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-[#00296B]">Generar venta / cobro</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label className="text-sm">Concepto *</Label><Input value={saleForm.concept} onChange={e => setSaleForm(p => ({ ...p, concept: e.target.value }))} className="mt-1 text-sm" /></div>
+            {/* Catalog selector */}
+            {(products.length > 0 || fees.length > 0) && (
+              <div>
+                <Label className="text-sm">Elegir del catálogo (opcional)</Label>
+                <Select value="" onValueChange={v => {
+                  if (v.startsWith("prod_")) {
+                    const p = products.find(x => x.id === v.slice(5));
+                    if (p) setSaleForm(prev => ({ ...prev, product_id: p.id, fee_id: "", concept: p.name, amount: p.price?.toString() || "" }));
+                  } else if (v.startsWith("fee_")) {
+                    const f = fees.find(x => x.id === v.slice(4));
+                    if (f) setSaleForm(prev => ({ ...prev, fee_id: f.id, product_id: "", concept: f.name, amount: f.amount?.toString() || "" }));
+                  }
+                }}>
+                  <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Seleccionar producto o cuota..." /></SelectTrigger>
+                  <SelectContent>
+                    {fees.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-xs font-bold text-[#94A3B8] uppercase tracking-wide">Cuotas</div>
+                        {fees.map(f => <SelectItem key={`fee_${f.id}`} value={`fee_${f.id}`}>{f.name} — {f.amount}€</SelectItem>)}
+                      </>
+                    )}
+                    {products.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-xs font-bold text-[#94A3B8] uppercase tracking-wide">Productos</div>
+                        {products.map(p => <SelectItem key={`prod_${p.id}`} value={`prod_${p.id}`}>{p.name} — {p.price}€</SelectItem>)}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div><Label className="text-sm">Concepto *</Label><Input value={saleForm.concept} onChange={e => setSaleForm(p => ({ ...p, concept: e.target.value }))} className="mt-1 text-sm" placeholder="Descripción del cobro" /></div>
             <div><Label className="text-sm">Importe (€) *</Label><Input type="number" step="0.01" value={saleForm.amount} onChange={e => setSaleForm(p => ({ ...p, amount: e.target.value }))} className="mt-1 text-sm" /></div>
             <div>
               <Label className="text-sm">Método de pago</Label>
               <Select value={saleForm.payment_method} onValueChange={v => setSaleForm(p => ({ ...p, payment_method: v }))}>
                 <SelectTrigger className="mt-1 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pending">Pendiente</SelectItem>
-                  <SelectItem value="cash">Efectivo</SelectItem>
-                  <SelectItem value="bank_transfer">Transferencia</SelectItem>
+                  <SelectItem value="pending">Pendiente de cobro</SelectItem>
+                  <SelectItem value="cash">Efectivo (cobrado)</SelectItem>
+                  <SelectItem value="bank_transfer">Transferencia bancaria</SelectItem>
                   <SelectItem value="sepa">SEPA / Domiciliación</SelectItem>
                   <SelectItem value="stripe">Tarjeta (Stripe)</SelectItem>
                   <SelectItem value="redsys">TPV Redsys</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div><Label className="text-sm">Fecha límite</Label><Input type="date" value={saleForm.due_date} onChange={e => setSaleForm(p => ({ ...p, due_date: e.target.value }))} className="mt-1 text-sm" /></div>
+            <div><Label className="text-sm">Fecha límite de pago</Label><Input type="date" value={saleForm.due_date} onChange={e => setSaleForm(p => ({ ...p, due_date: e.target.value }))} className="mt-1 text-sm" /></div>
             <div><Label className="text-sm">Notas</Label><Input value={saleForm.notes} onChange={e => setSaleForm(p => ({ ...p, notes: e.target.value }))} className="mt-1 text-sm" /></div>
             <Button onClick={handleCreateSale} disabled={!saleForm.concept || !saleForm.amount} className="w-full bg-green-600 hover:bg-green-700 text-white">
-              Crear venta
+              {saleForm.payment_method === "cash" ? "Registrar cobro (pagado)" : "Crear venta pendiente"}
             </Button>
           </div>
         </DialogContent>
