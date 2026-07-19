@@ -4448,9 +4448,6 @@ async def preview_comm_list(list_id: str, request: Request):
 async def health():
     return {"status": "ok"}
 
-# Include router
-app.include_router(api_router)
-
 # ── CORS dinámico: se recarga desde MongoDB al arrancar y al crear cada club ──
 _BASE_CORS_ORIGINS = {
     "https://racing-sangabriel.netlify.app",
@@ -5401,6 +5398,8 @@ async def update_submission_status(submission_id: str, data: FormSubmissionStatu
     updated = await db.form_submissions.find_one({"id": submission_id, "club_id": club_id}, {"_id": 0})
     return updated
 
+# Include routers — MUST be after all @api_router.* definitions
+app.include_router(api_router)
 app.include_router(super_router)
 
 
