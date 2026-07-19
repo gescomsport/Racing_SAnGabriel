@@ -6,10 +6,10 @@
   NODE_VERSION = "20"
   CI = "false"
 
-# Proxy: reenvía /api/* a Railway — evita CORS completamente
+# Proxy: reenvía /api/* al backend en VPS propio
 [[redirects]]
   from   = "/api/*"
-  to     = "https://graceful-magic-production-c9ee.up.railway.app/api/:splat"
+  to     = "https://api.sudeporte.com/api/:splat"
   status = 200
   force  = true
 
