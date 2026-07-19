@@ -2,7 +2,7 @@ import axios from "axios";
 
 const TOKEN_KEY = "sudeporte_token";
 
-// En producción: /api → Netlify proxy → Railway (sin CORS)
+// En producción: /api → Netlify proxy → VPS (api.sudeporte.com)
 // En desarrollo: REACT_APP_BACKEND_URL/api (http://localhost:8000)
 const BASE = `${process.env.REACT_APP_BACKEND_URL || ""}/api`;
 

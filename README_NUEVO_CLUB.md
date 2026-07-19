@@ -1,4 +1,6 @@
-# Cómo crear un nuevo club en SUDEPORTE
+> ⚠️ **OBSOLETO — julio 2026.** Este documento describe el proceso con Railway. **Runbook actual: `SUDEPORTE-DEPLOY-CLUB.md`** (directorio raíz de WEBS_SUDEPORTE).
+
+# Cómo crear un nuevo club en SUDEPORTE (OBSOLETO)
 
 Tiempo estimado: **15-20 minutos** por club.
 

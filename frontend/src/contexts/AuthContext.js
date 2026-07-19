@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import axios from "axios";
 
-// En producción (Netlify) usamos /api que el proxy reenvía a Railway sin CORS
+// En producción (Netlify) usamos /api que el proxy reenvía al VPS (api.sudeporte.com)
 // En local usamos REACT_APP_BACKEND_URL (http://localhost:8000)
 const BACKEND = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND}/api`;

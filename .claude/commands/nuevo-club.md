@@ -1,76 +1,58 @@
-# Skill: Montar web de nuevo club deportivo
+# Skill: Dar de alta un nuevo club en SUDEPORTE
 
-Cuando se invoca `/nuevo-club`, pedir al usuario los datos mínimos del club y generar automáticamente todos los cambios necesarios para desplegar la plataforma SUDEPORTE para ese club.
+> El runbook completo y autoritativo para dar de alta un club está en `SUDEPORTE-DEPLOY-CLUB.md` (directorio raíz de WEBS_SUDEPORTE). Este skill es un asistente interactivo que guía el proceso.
+
+Cuando se invoca `/nuevo-club`, recopilar los datos del club y ejecutar los cambios de código necesarios para añadir el club a la plataforma multi-tenant del VPS.
 
 ## Datos a pedir al usuario
 
-Antes de hacer ningún cambio, preguntar (o pedir que peguen el formulario de datos):
-
 1. **Nombre completo del club** (ej: Club Deportivo Villarreal A.D.C.)
 2. **Nombre corto** (ej: CD Villarreal)
-3. **Subtítulo** (ej: Fútbol Base · Valencia)
-4. **ID interno** (slug sin espacios, ej: cd_villarreal)
-5. **Temporada** (ej: 2025/26)
-6. **Dirección completa**
-7. **Teléfono principal** (con prefijo internacional)
-8. **Email del club**
-9. **URL Instagram** + handle
-10. **URL Facebook** + handle
-11. **Escudo**: pedir URL o SVG inline
-12. **Color principal** (hex)
-13. **Color acento/dorado** (hex)
-14. **URL del backend Railway** (si ya está desplegado) o indicar que se usará placeholder
-15. **Estadísticas aproximadas**: años, jugadores, equipos, entrenadores
-16. **Lista de equipos/categorías**
+3. **ID interno** (slug sin espacios, ej: cd_villarreal) — debe ser único
+4. **Temporada activa** (ej: 2026/27)
+5. **Dirección, teléfono, email del club**
+6. **Instagram y Facebook** (URL + handle)
+7. **Escudo**: URL de imagen o SVG inline
+8. **Color principal** (hex)
+9. **Estadísticas**: años fundación, jugadores, equipos, entrenadores
+10. **Lista de equipos/categorías**
 
-## Cambios a realizar
+## Cambios de código a realizar
 
-### 1. `website/index.html` — CLUB_CONFIG
+### 1. Código del frontend (`frontend/src/`)
 
-Reemplazar el bloque `var CLUB_CONFIG = { ... }` con los datos del nuevo club. Mantener exactamente la misma estructura, solo cambiar valores.
+El frontend es multi-tenant — el `club_id` viene del JWT tras el login, no está hardcodeado. No hay cambios de código necesarios en el frontend para añadir un club nuevo.
 
-Campos a actualizar:
-- name, subtitle, tagline, clubId, season
-- phone, phone2, whatsapp, email, address, addressCity
-- instagram, instagramHandle, facebook, facebookHandle
-- shieldSvg (URL o inline SVG)
-- statsYears, statsPlayers, statsTeams, statsCoaches
-- apiUrl (URL del backend Railway del nuevo club)
+### 2. Configuración seed en `backend/server.py`
 
-### 2. `website/index.html` — Facebook embed
+Si el nuevo club necesita datos iniciales (settings, equipo por defecto), añadir un bloque en la función seed del backend con los datos del club.
 
-Buscar `data-href="https://www.facebook.com/RacingSanGabrielADC/"` y reemplazar con la URL de Facebook del nuevo club.
+### 3. Netlify — nuevo site
 
-Buscar `cite="https://www.facebook.com/RacingSanGabrielADC/"` y reemplazar igualmente.
+Crear un nuevo site en Netlify conectado al mismo repo `gescomsport/Racing_SAnGabriel`, con estos ajustes:
+- Base directory: `frontend` (o raíz si se usa el netlify.toml raíz)
+- Proxy `/api/*` → `https://api.sudeporte.com/api/:splat` (ya configurado en netlify.toml)
+- Dominio: `[clubid].netlify.app` o dominio propio del club
 
-### 3. `backend/server.py` — Datos seed
+### 4. Backend VPS — crear usuario admin del club
 
-Buscar `_SEED_CLUB = "racing_sangabriel"` y reemplazar con el nuevo clubId.
+En el VPS, ejecutar:
+```bash
+docker exec -it sudeporte_api python3 -c "
+from motor.motor_asyncio import AsyncIOMotorClient
+import asyncio, uuid, bcrypt
+# crear user admin para el nuevo club_id
+"
+```
+O usar el script `backend/setup_superadmin.py` si existe para el nuevo club.
 
-Buscar el bloque de settings por defecto (~línea 1598) y actualizar con los datos del club:
-- club_name, address, phone, email
-- instagram_url, facebook_url, instagram_username, facebook_page
-- facebook_page_url
+### 5. MongoDB — datos iniciales
 
-### 4. `netlify.toml` — Sin cambios necesarios
-
-El netlify.toml raíz es genérico y no necesita cambios.
-
-### 5. Verificación
-
-Tras los cambios:
-- Verificar brace balance del HTML: `grep -c '{' website/index.html` vs `grep -c '}' website/index.html`
-- Verificar compilación Python: `python3 -m py_compile backend/server.py && echo OK`
-- Commit con mensaje descriptivo del nuevo club
-
-## Instrucciones para el deploy (dar al usuario)
-
-Tras los cambios de código, indicar al usuario los pasos en Railway y Netlify según `docs/NUEVO_CLUB_GUIA.md` pasos 4 y 5.
+Conectar al container MongoDB y crear los settings iniciales del club con `club_id` correcto.
 
 ## Notas
 
-- Nunca tocar la lógica de autenticación, contabilidad ni estructura multi-tenant
-- El clubId debe ser único en toda la plataforma
-- Si el usuario no tiene escudo todavía, usar un placeholder y dejar un TODO comentario
-- Los colores CSS se aplican automáticamente vía CLUB_CONFIG en la función applyConfig()
-- El email SMTP se configura después desde el panel admin — no es necesario para el deploy inicial
+- El `club_id` debe ser único en toda la plataforma — verificar en MongoDB antes de usar
+- Email SMTP se configura desde el panel admin después del alta — no bloquea el deploy
+- Ver `SUDEPORTE-DEPLOY-CLUB.md` para los comandos exactos de VPS, Docker y MongoDB
+- Nunca hardcodear credenciales ni URLs de Railway (Railway ya no se usa)

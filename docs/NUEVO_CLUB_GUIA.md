@@ -1,4 +1,6 @@
-# Guía: Montar la Web de un Nuevo Club
+> ⚠️ **OBSOLETO — julio 2026.** Esta guía describe el proceso con Railway. El proceso actual usa el VPS propio con Docker. **Runbook actual: `SUDEPORTE-DEPLOY-CLUB.md`** (directorio raíz de WEBS_SUDEPORTE).
+
+# Guía: Montar la Web de un Nuevo Club (OBSOLETO)
 ### Tiempo estimado: 2-4 horas
 
 ---

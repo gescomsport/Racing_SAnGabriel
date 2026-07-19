@@ -1,4 +1,6 @@
-# SUDEPORTE — Arquitectura Multi-Tenant
+> ⚠️ **OBSOLETO — julio 2026.** Este documento describe la arquitectura con Railway + MongoDB Atlas. Desde julio 2026 el backend corre en VPS propio con Docker. **Fuente de verdad actual: `SUDEPORTE-ARQUITECTURA.md`** (en el directorio raíz de WEBS_SUDEPORTE). Se conserva solo como referencia histórica.
+
+# SUDEPORTE — Arquitectura Multi-Tenant (OBSOLETO)
 
 ## Visión general
 
