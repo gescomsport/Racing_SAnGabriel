@@ -493,9 +493,28 @@ const TEAM_COLORS = [
 function TeamForm({ form, setForm, coaches, facilities, onSave, saveLabel }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleCoach = (id) => setForm(f => {
-    const ids = f.coach_ids.includes(id) ? f.coach_ids.filter(x => x !== id) : [...f.coach_ids, id];
+    const ids = (f.coach_ids || []).includes(id) ? (f.coach_ids || []).filter(x => x !== id) : [...(f.coach_ids || []), id];
     return { ...f, coach_ids: ids };
   });
+  const [uploadingImg, setUploadingImg] = useState(false);
+
+  async function handleImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingImg(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await ax.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      set("image_url", `https://api.sudeporte.com${res.data.url}`);
+    } catch {
+      alert("Error al subir la imagen.");
+    } finally {
+      setUploadingImg(false);
+    }
+  }
+
+  const ROLE_LABELS = { entrenador: "Entrenador/a", auxiliar: "Auxiliar", delegado: "Delegado/a", fisioterapeuta: "Fisioterapeuta", medico: "Médico" };
 
   return (
     <div className="space-y-3">
@@ -503,31 +522,52 @@ function TeamForm({ form, setForm, coaches, facilities, onSave, saveLabel }) {
       <div className="grid grid-cols-2 gap-3">
         <div><Label className="text-sm">Categoría</Label><Input value={form.category} onChange={e => set("category", e.target.value)} className="mt-1" placeholder="Juvenil, Cadete..." /></div>
         <div>
-          <Label className="text-sm">Instalación</Label>
+          <Label className="text-sm">Instalación donde entrena</Label>
           <Select value={form.facility_id || "_none"} onValueChange={v => set("facility_id", v === "_none" ? "" : v)}>
-            <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="Ninguna" /></SelectTrigger>
+            <SelectTrigger className="mt-1 text-sm"><SelectValue placeholder="— Sin instalación —" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="_none">Sin instalación</SelectItem>
-              {facilities.map(fa => <SelectItem key={fa.id} value={fa.id}>{fa.name}</SelectItem>)}
+              <SelectItem value="_none">— Sin instalación —</SelectItem>
+              {facilities.length === 0
+                ? <SelectItem value="_empty" disabled>No hay instalaciones creadas</SelectItem>
+                : facilities.map(fa => <SelectItem key={fa.id} value={fa.id}>{fa.name}</SelectItem>)
+              }
             </SelectContent>
           </Select>
         </div>
       </div>
       <div>
-        <Label className="text-sm">Entrenadores del sistema</Label>
-        <div className="mt-1 border border-[#E2E8F0] rounded-lg p-2 max-h-32 overflow-y-auto">
+        <Label className="text-sm">Personal técnico asignado</Label>
+        <div className="mt-1 border border-[#E2E8F0] rounded-lg p-2 max-h-40 overflow-y-auto">
           {coaches.length === 0
-            ? <p className="text-xs text-[#94A3B8] p-1">No hay entrenadores. Créalos en Usuarios / Acceso.</p>
+            ? <p className="text-xs text-[#94A3B8] p-1">No hay personal técnico. Créalos en "Personal del Club".</p>
             : coaches.map(c => (
-              <label key={c.id} className="flex items-center gap-2 px-1 py-1 hover:bg-[#F4F7FB] rounded cursor-pointer">
-                <input type="checkbox" checked={form.coach_ids.includes(c.id)} onChange={() => toggleCoach(c.id)} />
-                <span className="text-sm">{c.name || c.email}</span>
+              <label key={c.id} className="flex items-center gap-2 px-1 py-1.5 hover:bg-[#F4F7FB] rounded cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 accent-[#2460FF]" checked={(form.coach_ids || []).includes(c.id)} onChange={() => toggleCoach(c.id)} />
+                <div className="flex-1">
+                  <span className="text-sm font-medium">{`${c.name || ""} ${c.surname || ""}`.trim()}</span>
+                  <span className="text-xs text-[#94A3B8] ml-2">{ROLE_LABELS[c.role] || c.role}</span>
+                </div>
               </label>
             ))
           }
         </div>
-        <p className="text-xs text-[#94A3B8] mt-1">O escribe nombre manualmente:</p>
-        <Input value={form.coach} onChange={e => set("coach", e.target.value)} className="mt-1 text-sm" placeholder="Nombre entrenador adicional..." />
+      </div>
+      <div>
+        <Label className="text-sm">Foto del equipo</Label>
+        <div className="mt-1 flex items-center gap-3">
+          {form.image_url && (
+            <img src={form.image_url} alt="Equipo" className="w-14 h-14 rounded-lg object-cover border border-[#E2E8F0]" />
+          )}
+          <label className="cursor-pointer flex-1">
+            <div className="border border-dashed border-[#CBD5E1] rounded-lg px-4 py-2.5 text-sm text-center text-[#64748B] hover:bg-[#F8FAFC]">
+              {uploadingImg ? "Subiendo…" : form.image_url ? "Cambiar foto" : "Subir foto del equipo"}
+            </div>
+            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImg} />
+          </label>
+          {form.image_url && (
+            <button type="button" className="text-xs text-red-400 hover:text-red-600" onClick={() => set("image_url", "")}>✕</button>
+          )}
+        </div>
       </div>
       <div>
         <Label className="text-sm">Color del equipo (en el calendario)</Label>
@@ -542,7 +582,6 @@ function TeamForm({ form, setForm, coaches, facilities, onSave, saveLabel }) {
           <span className="text-xs text-[#94A3B8] font-mono">{form.color || "#2460FF"}</span>
         </div>
       </div>
-      <div><Label className="text-sm">URL Imagen del equipo</Label><Input value={form.image_url} onChange={e => set("image_url", e.target.value)} className="mt-1" placeholder="https://..." /></div>
       <div><Label className="text-sm">Descripción</Label><Textarea value={form.description} onChange={e => set("description", e.target.value)} rows={2} className="mt-1" /></div>
       <Button onClick={onSave} disabled={!form.name} className="w-full bg-[#2460FF] hover:bg-[#00296B] text-white">{saveLabel}</Button>
     </div>
@@ -561,18 +600,22 @@ function TeamsManager({ teams, onRefresh }) {
 
   useEffect(() => {
     Promise.all([
-      ax.get("/admin/users").catch(() => ({ data: [] })),
+      ax.get("/staff").catch(() => ({ data: [] })),
       ax.get("/facilities").catch(() => ({ data: [] })),
       ax.get("/players").catch(() => ({ data: [] })),
-    ]).then(([u, f, p]) => {
-      setCoaches(u.data.filter(x => x.role === "entrenador"));
+    ]).then(([s, f, p]) => {
+      // Coaches = todo el staff técnico (entrenador, auxiliar, delegado)
+      setCoaches(s.data.filter(x => ["entrenador","auxiliar","delegado","fisioterapeuta","medico"].includes(x.role)));
       setFacilities(f.data);
       setPlayers(p.data);
     });
   }, []);
 
   const buildPayload = (f) => {
-    const coachNames = (f.coach_ids || []).map(id => coaches.find(c => c.id === id)?.name || "").filter(Boolean);
+    const coachNames = (f.coach_ids || []).map(id => {
+      const c = coaches.find(c => c.id === id);
+      return c ? `${c.name || ""} ${c.surname || ""}`.trim() : "";
+    }).filter(Boolean);
     return { ...f, coach: coachNames.join(", ") || f.coach };
   };
 
@@ -603,7 +646,10 @@ function TeamsManager({ teams, onRefresh }) {
 
   const getCoachNames = (team) => {
     if (team.coach_ids?.length) {
-      return team.coach_ids.map(id => coaches.find(c => c.id === id)?.name || "").filter(Boolean).join(", ");
+      return team.coach_ids.map(id => {
+        const c = coaches.find(c => c.id === id);
+        return c ? `${c.name || ""} ${c.surname || ""}`.trim() : "";
+      }).filter(Boolean).join(", ");
     }
     return team.coach || "";
   };
